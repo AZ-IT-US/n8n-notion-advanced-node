@@ -1,6 +1,6 @@
 {
   "name": "n8n-notion-advanced-node-community",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Advanced n8n Notion node with comprehensive block type and formatting support for all 25+ block types (BETA)",
   "main": "dist/index.js",
   "scripts": {
