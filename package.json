@@ -47,7 +47,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/n8n-notion-advanced-node.git"
+    "url": "https://github.com/AZ-IT-US/n8n-notion-advanced-node.git"
   },
   "engines": {
     "node": ">=16.10",
