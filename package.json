@@ -1,10 +1,11 @@
 {
-  "name": "@your-username/n8n-notion-advanced-node",
+  "name": "n8n-notion-advanced-node-community",
   "version": "1.0.0-beta.1",
   "description": "Advanced n8n Notion node with comprehensive block type and formatting support for all 25+ block types (BETA)",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && npm run copy-files",
+    "build": "node build-for-install.js",
+    "build-ts": "tsc && npm run copy-files",
     "copy-files": "copyfiles -u 1 \"nodes/**/*.{png,svg}\" dist/",
     "dev": "tsc --watch",
     "format": "prettier --write .",
