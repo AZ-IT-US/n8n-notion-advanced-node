@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-notion-advanced",
-  "version": "1.0.0",
-  "description": "Advanced n8n Notion node with comprehensive block type and formatting support for all 25+ block types (BETA)",
+  "version": "1.1.0-beta.3",
+  "description": "Advanced n8n Notion nodes: Full-featured workflow node + AI Agent Tool for intelligent Notion automation with 25+ block types (BETA)",
   "main": "dist/index.js",
   "scripts": {
     "build": "node dev-notes/build-for-install.js",
@@ -20,7 +20,8 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "nodes": [
-      "dist/nodes/NotionAdvanced/NotionAdvanced.node.js"
+      "dist/nodes/NotionAdvanced/NotionAdvanced.node.js",
+      "dist/nodes/NotionAdvanced/NotionAITool.node.js"
     ]
   },
   "keywords": [
@@ -37,7 +38,15 @@
     "integration",
     "notion-api",
     "block-types",
-    "formatting"
+    "formatting",
+    "ai",
+    "ai-agent",
+    "ai-tool",
+    "chatgpt",
+    "claude",
+    "llm",
+    "natural-language",
+    "intelligent-automation"
   ],
   "license": "MIT",
   "homepage": "https://github.com/your-username/n8n-notion-advanced-node#readme",

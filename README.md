@@ -1,6 +1,16 @@
-# n8n Notion Advanced Node
+# n8n Notion Advanced Nodes
 
-A comprehensive n8n community node that provides complete access to the Notion API v2022-06-28 with support for all block types, rich text formatting, and CRUD operations.
+A comprehensive n8n community package that provides complete access to the Notion API v2022-06-28 with support for all block types, rich text formatting, and CRUD operations. Includes both a full-featured workflow node and an AI Agent Tool for intelligent automation.
+
+## What's Included
+
+### 1. **Notion Advanced** - Full-Featured Workflow Node
+Complete Notion integration for traditional n8n workflows with comprehensive CRUD operations and all 25+ block types.
+
+### 2. **Notion AI Tool** - AI Agent Integration
+Specialized tool designed for n8n's AI Agent Nodes, enabling natural language Notion automation.
+
+📖 **For AI Agent usage, see [AI-TOOL-USAGE.md](./AI-TOOL-USAGE.md)**
 
 ## Features
 
@@ -27,11 +37,40 @@ A comprehensive n8n community node that provides complete access to the Notion A
 
 ## Installation
 
+### Via n8n GUI (Recommended)
+1. Open n8n Settings → Community Nodes
+2. Click "Install a community node"
+3. Enter: `n8n-nodes-notion-advanced`
+4. Click Install
+
+### Via npm
 ```bash
-npm install n8n-notion-advanced-node
+npm install n8n-nodes-notion-advanced
 ```
 
 📖 **For detailed installation instructions including Docker setup, development mode, and troubleshooting, see [INSTALLATION.md](./INSTALLATION.md)**
+
+## Quick Start
+
+### For AI Agents
+```markdown
+1. Add AI Agent Node to your workflow
+2. Configure your chat model (OpenAI, Anthropic, etc.)
+3. Add "Notion AI Tool" from available tools
+4. Configure Notion credentials
+5. AI Agent can now create/manage Notion content with natural language!
+
+Example: "Create a project plan page with timeline and milestones"
+```
+
+### For Traditional Workflows
+```markdown
+1. Add "Notion Advanced" node to your workflow
+2. Configure Notion credentials
+3. Choose resource (Page/Block/Database/User)
+4. Select operation and configure parameters
+5. Execute comprehensive Notion operations
+```
 
 ## Prerequisites
 
