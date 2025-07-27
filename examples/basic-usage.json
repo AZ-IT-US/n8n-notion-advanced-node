@@ -1,0 +1,217 @@
+{
+  "name": "Notion Advanced - Basic Usage Examples",
+  "description": "Collection of example workflows using the Notion Advanced node",
+  "version": 1,
+  "examples": [
+    {
+      "name": "Create Page with Mixed Content",
+      "description": "Creates a page with various block types including text, code, and media",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Create Page",
+            "type": "n8n-notion-advanced-node.notionAdvanced",
+            "parameters": {
+              "resource": "page",
+              "operation": "create",
+              "parent": "your-parent-page-id",
+              "title": "Project Documentation",
+              "properties": {
+                "property": [
+                  {
+                    "name": "Status",
+                    "type": "select",
+                    "value": "{\"name\": \"In Progress\"}"
+                  },
+                  {
+                    "name": "Priority",
+                    "type": "select", 
+                    "value": "{\"name\": \"High\"}"
+                  }
+                ]
+              },
+              "additionalFields": {
+                "icon": "📝",
+                "cover": "https://images.unsplash.com/photo-1553877522-43269d4ea984"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Add Content Blocks",
+      "description": "Adds various types of content blocks to a page",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Add Blocks",
+            "type": "n8n-notion-advanced-node.notionAdvanced",
+            "parameters": {
+              "resource": "block",
+              "operation": "create",
+              "parentId": "{{ $json.id }}",
+              "blocks": {
+                "block": [
+                  {
+                    "type": "heading_1",
+                    "content": "Getting Started",
+                    "properties": "{\"color\": \"blue\"}"
+                  },
+                  {
+                    "type": "paragraph",
+                    "richText": "[{\"type\": \"text\", \"text\": {\"content\": \"This document contains \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"important information\", \"link\": {\"url\": \"https://example.com\"}}, \"annotations\": {\"bold\": true, \"color\": \"red\"}}]"
+                  },
+                  {
+                    "type": "bulleted_list_item",
+                    "content": "Feature overview"
+                  },
+                  {
+                    "type": "bulleted_list_item", 
+                    "content": "Installation instructions"
+                  },
+                  {
+                    "type": "bulleted_list_item",
+                    "content": "Configuration examples"
+                  },
+                  {
+                    "type": "code",
+                    "content": "npm install n8n-notion-advanced-node",
+                    "properties": "{\"language\": \"bash\"}"
+                  },
+                  {
+                    "type": "callout",
+                    "content": "Remember to restart n8n after installing the node!",
+                    "properties": "{\"icon\": \"💡\", \"color\": \"yellow_background\"}"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Rich Text Formatting",
+      "description": "Demonstrates advanced rich text formatting capabilities",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Rich Text Example",
+            "type": "n8n-notion-advanced-node.notionAdvanced",
+            "parameters": {
+              "resource": "block",
+              "operation": "create", 
+              "parentId": "your-page-id",
+              "blocks": {
+                "block": [
+                  {
+                    "type": "paragraph",
+                    "richText": "[{\"type\": \"text\", \"text\": {\"content\": \"This is \"}, \"annotations\": {\"color\": \"default\"}}, {\"type\": \"text\", \"text\": {\"content\": \"bold text\"}, \"annotations\": {\"bold\": true}}, {\"type\": \"text\", \"text\": {\"content\": \", \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"italic text\"}, \"annotations\": {\"italic\": true}}, {\"type\": \"text\", \"text\": {\"content\": \", and \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"linked text\", \"link\": {\"url\": \"https://n8n.io\"}}, \"annotations\": {\"underline\": true, \"color\": \"blue\"}}]"
+                  },
+                  {
+                    "type": "paragraph",
+                    "richText": "[{\"type\": \"text\", \"text\": {\"content\": \"Code: \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"console.log()\"}, \"annotations\": {\"code\": true}}, {\"type\": \"text\", \"text\": {\"content\": \" and \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"strikethrough text\"}, \"annotations\": {\"strikethrough\": true}}]"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Create Table",
+      "description": "Creates a table with headers and data",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Create Table",
+            "type": "n8n-notion-advanced-node.notionAdvanced",
+            "parameters": {
+              "resource": "block",
+              "operation": "create",
+              "parentId": "your-page-id",
+              "blocks": {
+                "block": [
+                  {
+                    "type": "heading_2",
+                    "content": "Project Status"
+                  },
+                  {
+                    "type": "table",
+                    "properties": "{\"table_width\": 3, \"has_column_header\": true, \"has_row_header\": false}",
+                    "children": "[{\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Task\"}, \"annotations\": {\"bold\": true}}], [{\"type\": \"text\", \"text\": {\"content\": \"Status\"}, \"annotations\": {\"bold\": true}}], [{\"type\": \"text\", \"text\": {\"content\": \"Due Date\"}, \"annotations\": {\"bold\": true}}]]}}, {\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Design\"}, \"annotations\": {}}], [{\"type\": \"text\", \"text\": {\"content\": \"Complete\"}, \"annotations\": {\"color\": \"green\"}}], [{\"type\": \"text\", \"text\": {\"content\": \"2024-01-15\"}, \"annotations\": {}}]]}}, {\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Development\"}, \"annotations\": {}}], [{\"type\": \"text\", \"text\": {\"content\": \"In Progress\"}, \"annotations\": {\"color\": \"yellow\"}}], [{\"type\": \"text\", \"text\": {\"content\": \"2024-01-30\"}, \"annotations\": {}}]]}}]"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Search and Update",
+      "description": "Searches for pages and updates their properties",
+      "workflow": {
+        "nodes": [
+          {
+            "name": "Search Pages",
+            "type": "n8n-notion-advanced-node.notionAdvanced",
+            "parameters": {
+              "resource": "page",
+              "operation": "search",
+              "query": "Project",
+              "filter": "{\"property\": \"object\", \"value\": \"page\"}"
+            }
+          },
+          {
+            "name": "Update Status",
+            "type": "n8n-notion-advanced-node.notionAdvanced",
+            "parameters": {
+              "resource": "page",
+              "operation": "update",
+              "pageId": "{{ $json.results[0].id }}",
+              "properties": {
+                "property": [
+                  {
+                    "name": "Status",
+                    "type": "select",
+                    "value": "{\"name\": \"Completed\"}"
+                  },
+                  {
+                    "name": "Last Updated",
+                    "type": "date",
+                    "value": "{\"start\": \"{{ $now.toISODate() }}\"}"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tips": [
+    {
+      "title": "Rich Text JSON Format",
+      "description": "When using rich text, pass a JSON string array with proper escaping. Each object should have type, text, and annotations properties."
+    },
+    {
+      "title": "Block Properties",
+      "description": "Block properties should be passed as JSON strings. Common properties include color, language (for code), checked (for to-do), and icon (for callouts)."
+    },
+    {
+      "title": "Parent Resolution",
+      "description": "Parent IDs can be page URLs, UUIDs, or search terms. The node will automatically resolve them to the correct format."
+    },
+    {
+      "title": "Nested Blocks",
+      "description": "For nested blocks (like list items with sub-items), use the children property with an array of child block definitions."
+    },
+    {
+      "title": "Error Handling",
+      "description": "Enable 'Continue on Fail' to process multiple items even if some fail. Check the error property in outputs for failed items."
+    }
+  ]
+}

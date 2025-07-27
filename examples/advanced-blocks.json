@@ -1,0 +1,338 @@
+{
+  "name": "Notion Advanced - Complete Block Examples",
+  "description": "Comprehensive examples of all supported Notion block types",
+  "version": 1,
+  "block_examples": {
+    "text_blocks": {
+      "paragraph": {
+        "basic": {
+          "type": "paragraph",
+          "content": "This is a simple paragraph block."
+        },
+        "with_formatting": {
+          "type": "paragraph",
+          "richText": "[{\"type\": \"text\", \"text\": {\"content\": \"This paragraph has \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"bold\"}, \"annotations\": {\"bold\": true}}, {\"type\": \"text\", \"text\": {\"content\": \", \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"italic\"}, \"annotations\": {\"italic\": true}}, {\"type\": \"text\", \"text\": {\"content\": \", and \"}, \"annotations\": {}}, {\"type\": \"text\", \"text\": {\"content\": \"colored\"}, \"annotations\": {\"color\": \"blue\"}} text.]"
+        },
+        "with_color": {
+          "type": "paragraph",
+          "content": "This paragraph has a background color.",
+          "properties": "{\"color\": \"yellow_background\"}"
+        }
+      },
+      "headings": {
+        "heading_1": {
+          "type": "heading_1",
+          "content": "Main Title",
+          "properties": "{\"color\": \"blue\"}"
+        },
+        "heading_2": {
+          "type": "heading_2", 
+          "content": "Section Title",
+          "properties": "{\"color\": \"green\"}"
+        },
+        "heading_3": {
+          "type": "heading_3",
+          "content": "Subsection Title",
+          "properties": "{\"color\": \"orange\"}"
+        },
+        "toggleable_heading": {
+          "type": "heading_2",
+          "content": "Collapsible Section",
+          "properties": "{\"is_toggleable\": true}"
+        }
+      },
+      "lists": {
+        "bulleted_list": {
+          "type": "bulleted_list_item",
+          "content": "First bullet point"
+        },
+        "numbered_list": {
+          "type": "numbered_list_item", 
+          "content": "First numbered item"
+        },
+        "nested_list": {
+          "type": "bulleted_list_item",
+          "content": "Parent item",
+          "children": "[{\"type\": \"bulleted_list_item\", \"bulleted_list_item\": {\"rich_text\": [{\"type\": \"text\", \"text\": {\"content\": \"Child item 1\"}, \"annotations\": {}}]}}, {\"type\": \"bulleted_list_item\", \"bulleted_list_item\": {\"rich_text\": [{\"type\": \"text\", \"text\": {\"content\": \"Child item 2\"}, \"annotations\": {}}]}}]"
+        }
+      },
+      "interactive": {
+        "todo_unchecked": {
+          "type": "to_do",
+          "content": "Task to complete",
+          "properties": "{\"checked\": false}"
+        },
+        "todo_checked": {
+          "type": "to_do",
+          "content": "Completed task",
+          "properties": "{\"checked\": true, \"color\": \"green\"}"
+        },
+        "toggle": {
+          "type": "toggle",
+          "content": "Click to expand",
+          "children": "[{\"type\": \"paragraph\", \"paragraph\": {\"rich_text\": [{\"type\": \"text\", \"text\": {\"content\": \"Hidden content inside toggle\"}, \"annotations\": {}}]}}]"
+        }
+      },
+      "styling": {
+        "quote": {
+          "type": "quote",
+          "content": "This is an inspirational quote that stands out from regular text.",
+          "properties": "{\"color\": \"gray\"}"
+        },
+        "callout_info": {
+          "type": "callout",
+          "content": "This is an informational callout with an icon.",
+          "properties": "{\"icon\": \"ℹ️\", \"color\": \"blue_background\"}"
+        },
+        "callout_warning": {
+          "type": "callout",
+          "content": "This is a warning callout.",
+          "properties": "{\"icon\": \"⚠️\", \"color\": \"yellow_background\"}"
+        },
+        "callout_error": {
+          "type": "callout",
+          "content": "This is an error callout.",
+          "properties": "{\"icon\": \"❌\", \"color\": \"red_background\"}"
+        }
+      }
+    },
+    "code_blocks": {
+      "javascript": {
+        "type": "code",
+        "content": "function greet(name) {\n  console.log(`Hello, ${name}!`);\n  return `Welcome ${name}`;\n}",
+        "properties": "{\"language\": \"javascript\"}"
+      },
+      "python": {
+        "type": "code", 
+        "content": "def fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)",
+        "properties": "{\"language\": \"python\"}"
+      },
+      "sql": {
+        "type": "code",
+        "content": "SELECT users.name, COUNT(orders.id) as order_count\nFROM users\nLEFT JOIN orders ON users.id = orders.user_id\nGROUP BY users.id\nORDER BY order_count DESC;",
+        "properties": "{\"language\": \"sql\"}"
+      },
+      "bash": {
+        "type": "code",
+        "content": "#!/bin/bash\necho \"Starting deployment...\"\nnpm install\nnpm run build\nnpm run deploy\necho \"Deployment complete!\"",
+        "properties": "{\"language\": \"bash\"}"
+      },
+      "json": {
+        "type": "code",
+        "content": "{\n  \"name\": \"n8n-notion-advanced\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": {\n    \"n8n-workflow\": \"*\"\n  }\n}",
+        "properties": "{\"language\": \"json\"}"
+      }
+    },
+    "media_blocks": {
+      "image": {
+        "type": "image",
+        "properties": "{\"url\": \"https://images.unsplash.com/photo-1551033406-611cf9a28f54\", \"caption\": [{\"type\": \"text\", \"text\": {\"content\": \"Sample image from Unsplash\"}, \"annotations\": {}}]}"
+      },
+      "video": {
+        "type": "video",
+        "properties": "{\"url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"}"
+      },
+      "audio": {
+        "type": "audio", 
+        "properties": "{\"url\": \"https://example.com/audio.mp3\"}"
+      },
+      "file": {
+        "type": "file",
+        "properties": "{\"url\": \"https://example.com/document.pdf\", \"caption\": [{\"type\": \"text\", \"text\": {\"content\": \"Important document\"}, \"annotations\": {}}]}"
+      },
+      "pdf": {
+        "type": "pdf",
+        "properties": "{\"url\": \"https://example.com/manual.pdf\"}"
+      }
+    },
+    "embed_blocks": {
+      "bookmark": {
+        "type": "bookmark",
+        "properties": "{\"url\": \"https://n8n.io\", \"caption\": [{\"type\": \"text\", \"text\": {\"content\": \"n8n workflow automation\"}, \"annotations\": {}}]}"
+      },
+      "embed": {
+        "type": "embed",
+        "properties": "{\"url\": \"https://codepen.io/team/codepen/pen/PNaGbb\"}"
+      },
+      "link_preview": {
+        "type": "link_preview",
+        "properties": "{\"url\": \"https://github.com/n8n-io/n8n\"}"
+      }
+    },
+    "advanced_blocks": {
+      "equation": {
+        "type": "equation",
+        "properties": "{\"expression\": \"E = mc^2\"}"
+      },
+      "equation_complex": {
+        "type": "equation",
+        "properties": "{\"expression\": \"\\\\int_{-\\\\infty}^{\\\\infty} e^{-x^2} dx = \\\\sqrt{\\\\pi}\"}"
+      },
+      "divider": {
+        "type": "divider"
+      },
+      "table_of_contents": {
+        "type": "table_of_contents",
+        "properties": "{\"color\": \"gray\"}"
+      }
+    },
+    "table_blocks": {
+      "simple_table": {
+        "type": "table",
+        "properties": "{\"table_width\": 2, \"has_column_header\": true}",
+        "children": "[{\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Name\"}, \"annotations\": {\"bold\": true}}], [{\"type\": \"text\", \"text\": {\"content\": \"Value\"}, \"annotations\": {\"bold\": true}}]]}}, {\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Item 1\"}, \"annotations\": {}}], [{\"type\": \"text\", \"text\": {\"content\": \"100\"}, \"annotations\": {}}]]}}, {\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Item 2\"}, \"annotations\": {}}], [{\"type\": \"text\", \"text\": {\"content\": \"200\"}, \"annotations\": {}}]]}}]"
+      },
+      "complex_table": {
+        "type": "table",
+        "properties": "{\"table_width\": 4, \"has_column_header\": true, \"has_row_header\": true}",
+        "children": "[{\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"\"}, \"annotations\": {}}], [{\"type\": \"text\", \"text\": {\"content\": \"Q1\"}, \"annotations\": {\"bold\": true}}], [{\"type\": \"text\", \"text\": {\"content\": \"Q2\"}, \"annotations\": {\"bold\": true}}], [{\"type\": \"text\", \"text\": {\"content\": \"Q3\"}, \"annotations\": {\"bold\": true}}]]}}, {\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Revenue\"}, \"annotations\": {\"bold\": true}}], [{\"type\": \"text\", \"text\": {\"content\": \"$100K\"}, \"annotations\": {\"color\": \"green\"}}], [{\"type\": \"text\", \"text\": {\"content\": \"$120K\"}, \"annotations\": {\"color\": \"green\"}}], [{\"type\": \"text\", \"text\": {\"content\": \"$150K\"}, \"annotations\": {\"color\": \"green\"}}]]}}, {\"type\": \"table_row\", \"table_row\": {\"cells\": [[{\"type\": \"text\", \"text\": {\"content\": \"Expenses\"}, \"annotations\": {\"bold\": true}}], [{\"type\": \"text\", \"text\": {\"content\": \"$80K\"}, \"annotations\": {\"color\": \"red\"}}], [{\"type\": \"text\", \"text\": {\"content\": \"$85K\"}, \"annotations\": {\"color\": \"red\"}}], [{\"type\": \"text\", \"text\": {\"content\": \"$90K\"}, \"annotations\": {\"color\": \"red\"}}]]}}]"
+      }
+    },
+    "layout_blocks": {
+      "column_layout": {
+        "type": "column_list",
+        "children": "[{\"type\": \"column\", \"column\": {\"children\": [{\"type\": \"paragraph\", \"paragraph\": {\"rich_text\": [{\"type\": \"text\", \"text\": {\"content\": \"Left column content\"}, \"annotations\": {}}]}}]}}, {\"type\": \"column\", \"column\": {\"children\": [{\"type\": \"paragraph\", \"paragraph\": {\"rich_text\": [{\"type\": \"text\", \"text\": {\"content\": \"Right column content\"}, \"annotations\": {}}]}}]}}]"
+      },
+      "synced_block": {
+        "type": "synced_block",
+        "properties": "{\"synced_from\": null}",
+        "children": "[{\"type\": \"paragraph\", \"paragraph\": {\"rich_text\": [{\"type\": \"text\", \"text\": {\"content\": \"This content will be synchronized across references\"}, \"annotations\": {}}]}}]"
+      },
+      "template": {
+        "type": "template",
+        "content": "Template Button Text",
+        "children": "[{\"type\": \"paragraph\", \"paragraph\": {\"rich_text\": [{\"type\": \"text\", \"text\": {\"content\": \"This content will be duplicated when the template is used\"}, \"annotations\": {}}]}}]"
+      }
+    }
+  },
+  "rich_text_examples": {
+    "basic_formatting": [
+      {
+        "type": "text",
+        "text": {"content": "Normal text "},
+        "annotations": {}
+      },
+      {
+        "type": "text", 
+        "text": {"content": "bold"},
+        "annotations": {"bold": true}
+      },
+      {
+        "type": "text",
+        "text": {"content": " "},
+        "annotations": {}
+      },
+      {
+        "type": "text",
+        "text": {"content": "italic"},
+        "annotations": {"italic": true}
+      },
+      {
+        "type": "text",
+        "text": {"content": " "},
+        "annotations": {}
+      },
+      {
+        "type": "text",
+        "text": {"content": "underline"},
+        "annotations": {"underline": true}
+      }
+    ],
+    "colors_and_links": [
+      {
+        "type": "text",
+        "text": {"content": "Red text "},
+        "annotations": {"color": "red"}
+      },
+      {
+        "type": "text",
+        "text": {"content": "blue background "},
+        "annotations": {"color": "blue_background"}
+      },
+      {
+        "type": "text",
+        "text": {"content": "linked text", "link": {"url": "https://example.com"}},
+        "annotations": {"underline": true, "color": "blue"}
+      }
+    ],
+    "code_and_math": [
+      {
+        "type": "text",
+        "text": {"content": "Inline code: "},
+        "annotations": {}
+      },
+      {
+        "type": "text",
+        "text": {"content": "console.log()"},
+        "annotations": {"code": true}
+      },
+      {
+        "type": "text",
+        "text": {"content": " and math: "},
+        "annotations": {}
+      },
+      {
+        "type": "equation",
+        "equation": {"expression": "x^2 + y^2 = z^2"},
+        "annotations": {}
+      }
+    ],
+    "mentions": [
+      {
+        "type": "text",
+        "text": {"content": "Mentioning "},
+        "annotations": {}
+      },
+      {
+        "type": "mention",
+        "mention": {
+          "type": "user",
+          "user": {"id": "user-id-here"}
+        },
+        "annotations": {}
+      },
+      {
+        "type": "text", 
+        "text": {"content": " and "},
+        "annotations": {}
+      },
+      {
+        "type": "mention",
+        "mention": {
+          "type": "page",
+          "page": {"id": "page-id-here"}
+        },
+        "annotations": {}
+      }
+    ]
+  },
+  "workflow_examples": {
+    "content_migration": {
+      "description": "Migrate content from one page to another",
+      "steps": [
+        "1. Get source page content using getBlockChildren",
+        "2. Transform blocks as needed",
+        "3. Create new page with transformed blocks",
+        "4. Archive or update source page"
+      ]
+    },
+    "automated_documentation": {
+      "description": "Generate documentation from code repositories",
+      "steps": [
+        "1. Fetch code from Git repository",
+        "2. Parse documentation comments",
+        "3. Create structured Notion pages",
+        "4. Add code examples and API references"
+      ]
+    },
+    "project_management": {
+      "description": "Sync project data between systems",
+      "steps": [
+        "1. Query database for project updates", 
+        "2. Create/update project pages",
+        "3. Add status blocks and progress tracking",
+        "4. Notify team members via mentions"
+      ]
+    }
+  }
+}
