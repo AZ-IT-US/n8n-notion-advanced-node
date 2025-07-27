@@ -23,9 +23,22 @@ export class NotionAITool implements INodeType {
     group: ['ai'],
     version: 1,
     subtitle: '={{$parameter["operation"]}}',
-    description: 'AI-powered tool for creating and managing Notion content. Designed for use with AI Agent Nodes.',
+    description: 'AI-powered tool for creating and managing Notion content with natural language',
     defaults: {
       name: 'Notion AI Tool',
+    },
+    codex: {
+      categories: ['AI'],
+      subcategories: {
+        AI: ['Tools'],
+      },
+      resources: {
+        primaryDocumentation: [
+          {
+            url: 'https://developers.notion.com/',
+          },
+        ],
+      },
     },
     inputs: [NodeConnectionType.Main],
     outputs: [NodeConnectionType.Main],
@@ -154,34 +167,6 @@ export class NotionAITool implements INodeType {
         default: '',
         description: 'Search terms to find pages. Leave empty to get all pages.',
       },
-      {
-        displayName: 'Search Type',
-        name: 'searchType',
-        type: 'options',
-        displayOptions: {
-          show: {
-            operation: ['searchPages'],
-          },
-        },
-        options: [
-          {
-            name: 'All Content',
-            value: 'all',
-            description: 'Search in page titles and content',
-          },
-          {
-            name: 'Titles Only',
-            value: 'title',
-            description: 'Search only in page titles',
-          },
-          {
-            name: 'Recent Pages',
-            value: 'recent',
-            description: 'Get recently modified pages',
-          },
-        ],
-        default: 'all',
-      },
 
       // UPDATE PAGE PROPERTIES
       {
@@ -265,13 +250,6 @@ export class NotionAITool implements INodeType {
             description: 'URL of cover image for the page',
           },
           {
-            displayName: 'Return Full Content',
-            name: 'returnFullContent',
-            type: 'boolean',
-            default: false,
-            description: 'Whether to return full page content or just metadata',
-          },
-          {
             displayName: 'Max Results',
             name: 'maxResults',
             type: 'number',
@@ -297,8 +275,6 @@ export class NotionAITool implements INodeType {
       try {
         const operation = this.getNodeParameter('operation', i) as string;
         let result: IDataObject;
-
-        const nodeInstance = this.getNode() as any;
         
         switch (operation) {
           case 'createPageWithContent':
@@ -414,7 +390,6 @@ export class NotionAITool implements INodeType {
 
   private async searchPages(this: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
     const searchQuery = this.getNodeParameter('searchQuery', itemIndex, '') as string;
-    const searchType = this.getNodeParameter('searchType', itemIndex, 'all') as string;
     const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
     const maxResults = (additionalOptions.maxResults as number) || 20;
 
@@ -426,18 +401,10 @@ export class NotionAITool implements INodeType {
       body.query = searchQuery;
     }
 
-    // Set search filter based on type
-    if (searchType === 'title') {
-      body.filter = {
-        property: 'object',
-        value: 'page',
-      };
-    } else {
-      body.filter = {
-        property: 'object',
-        value: 'page',
-      };
-    }
+    body.filter = {
+      property: 'object',
+      value: 'page',
+    };
 
     const response = await notionApiRequest.call(this, 'POST', '/search', body);
 

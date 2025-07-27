@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-notion-advanced",
-  "version": "1.1.0-beta.4",
+  "version": "1.1.0-beta.6",
   "description": "Advanced n8n Notion nodes: Full-featured workflow node + AI Agent Tool for intelligent Notion automation with 25+ block types (BETA)",
   "main": "dist/index.js",
   "scripts": {
@@ -20,7 +20,8 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "nodes": [
-      "dist/nodes/NotionAdvanced/NotionAdvanced.node.js"
+      "dist/nodes/NotionAdvanced/NotionAdvanced.node.js",
+      "dist/nodes/NotionAdvanced/NotionAITool.node.js"
     ]
   },
   "keywords": [
