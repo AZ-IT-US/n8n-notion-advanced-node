@@ -1,11 +1,8 @@
-const { NodeOperationError } = require('n8n-workflow');
-
-const {
-  notionApiRequest,
-  validateCredentials,
-  createRichText,
-  resolvePageId,
-} = require('./NotionUtils');
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.NotionAITool = void 0;
+const n8n_workflow_1 = require("n8n-workflow");
+const NotionUtils_1 = require("./NotionUtils");
 
 class NotionAITool {
   constructor() {
@@ -292,9 +289,9 @@ class NotionAITool {
     const responseData = [];
 
     // Validate credentials
-    const isValid = await validateCredentials.call(this);
+    const isValid = await NotionUtils_1.validateCredentials.call(this);
     if (!isValid) {
-      throw new NodeOperationError(this.getNode(), 'Invalid Notion API credentials');
+      throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'Invalid Notion API credentials');
     }
 
     for (let i = 0; i < items.length; i++) {
@@ -322,7 +319,7 @@ class NotionAITool {
             result = await this.queryDatabase(i);
             break;
           default:
-            throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`);
+            throw new n8n_workflow_1.NodeOperationError(this.getNode(), `Unknown operation: ${operation}`);
         }
 
         responseData.push({
@@ -351,14 +348,14 @@ class NotionAITool {
     const content = this.getNodeParameter('content', itemIndex, '');
     const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex, {});
 
-    const resolvedParentId = await resolvePageId.call(this, parentId);
+    const resolvedParentId = await NotionUtils_1.resolvePageId.call(this, parentId);
 
     // Create the page first
     const pageBody = {
       parent: { page_id: resolvedParentId },
       properties: {
         title: {
-          title: [createRichText(pageTitle)],
+          title: [NotionUtils_1.createRichText(pageTitle)],
         },
       },
     };
@@ -371,13 +368,13 @@ class NotionAITool {
       pageBody.cover = { type: 'external', external: { url: additionalOptions.coverUrl } };
     }
 
-    const page = await notionApiRequest.call(this, 'POST', '/pages', pageBody);
+    const page = await NotionUtils_1.notionApiRequest.call(this, 'POST', '/pages', pageBody);
 
     // If content is provided, add it to the page
     if (content) {
       const blocks = this.parseContentToBlocks(content);
       if (blocks.length > 0) {
-        await notionApiRequest.call(this, 'PATCH', `/blocks/${page.id}/children`, {
+        await NotionUtils_1.notionApiRequest.call(this, 'PATCH', `/blocks/${page.id}/children`, {
           children: blocks,
         });
       }
@@ -395,14 +392,14 @@ class NotionAITool {
     const targetPageId = this.getNodeParameter('targetPageId', itemIndex);
     const content = this.getNodeParameter('content', itemIndex);
 
-    const resolvedPageId = await resolvePageId.call(this, targetPageId);
+    const resolvedPageId = await NotionUtils_1.resolvePageId.call(this, targetPageId);
     const blocks = this.parseContentToBlocks(content);
 
     if (blocks.length === 0) {
-      throw new NodeOperationError(this.getNode(), 'No valid content blocks found to add');
+      throw new n8n_workflow_1.NodeOperationError(this.getNode(), 'No valid content blocks found to add');
     }
 
-    const result = await notionApiRequest.call(this, 'PATCH', `/blocks/${resolvedPageId}/children`, {
+    const result = await NotionUtils_1.notionApiRequest.call(this, 'PATCH', `/blocks/${resolvedPageId}/children`, {
       children: blocks,
     });
 
@@ -433,7 +430,7 @@ class NotionAITool {
       value: 'page',
     };
 
-    const response = await notionApiRequest.call(this, 'POST', '/search', body);
+    const response = await NotionUtils_1.notionApiRequest.call(this, 'POST', '/search', body);
 
     return {
       totalResults: response.results?.length || 0,
@@ -446,10 +443,10 @@ class NotionAITool {
     const targetPageId = this.getNodeParameter('targetPageId', itemIndex);
     const propertiesToUpdate = this.getNodeParameter('propertiesToUpdate', itemIndex);
 
-    const resolvedPageId = await resolvePageId.call(this, targetPageId);
+    const resolvedPageId = await NotionUtils_1.resolvePageId.call(this, targetPageId);
     const properties = this.parsePropertiesToUpdate(propertiesToUpdate);
 
-    const result = await notionApiRequest.call(this, 'PATCH', `/pages/${resolvedPageId}`, {
+    const result = await NotionUtils_1.notionApiRequest.call(this, 'PATCH', `/pages/${resolvedPageId}`, {
       properties,
     });
 
@@ -465,10 +462,10 @@ class NotionAITool {
     const parentId = this.getNodeParameter('parentId', itemIndex);
     const entryProperties = this.getNodeParameter('entryProperties', itemIndex);
 
-    const resolvedParentId = await resolvePageId.call(this, parentId);
+    const resolvedParentId = await NotionUtils_1.resolvePageId.call(this, parentId);
     const properties = this.parsePropertiesToUpdate(entryProperties);
 
-    const result = await notionApiRequest.call(this, 'POST', '/pages', {
+    const result = await NotionUtils_1.notionApiRequest.call(this, 'POST', '/pages', {
       parent: { database_id: resolvedParentId },
       properties,
     });
@@ -487,7 +484,7 @@ class NotionAITool {
     const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex, {});
     const maxResults = additionalOptions.maxResults || 20;
 
-    const resolvedDatabaseId = await resolvePageId.call(this, databaseId);
+    const resolvedDatabaseId = await NotionUtils_1.resolvePageId.call(this, databaseId);
     const body = {
       page_size: Math.min(maxResults, 100),
     };
@@ -506,7 +503,7 @@ class NotionAITool {
       }
     }
 
-    const response = await notionApiRequest.call(this, 'POST', `/databases/${resolvedDatabaseId}/query`, body);
+    const response = await NotionUtils_1.notionApiRequest.call(this, 'POST', `/databases/${resolvedDatabaseId}/query`, body);
 
     return {
       databaseId: resolvedDatabaseId,
@@ -530,7 +527,7 @@ class NotionAITool {
           object: 'block',
           type: 'heading_1',
           heading_1: {
-            rich_text: [createRichText(line.substring(2))],
+            rich_text: [NotionUtils_1.createRichText(line.substring(2))],
           },
         });
       } else if (line.startsWith('## ')) {
@@ -538,7 +535,7 @@ class NotionAITool {
           object: 'block',
           type: 'heading_2',
           heading_2: {
-            rich_text: [createRichText(line.substring(3))],
+            rich_text: [NotionUtils_1.createRichText(line.substring(3))],
           },
         });
       } else if (line.startsWith('### ')) {
@@ -546,7 +543,7 @@ class NotionAITool {
           object: 'block',
           type: 'heading_3',
           heading_3: {
-            rich_text: [createRichText(line.substring(4))],
+            rich_text: [NotionUtils_1.createRichText(line.substring(4))],
           },
         });
       } else if (line.startsWith('- ') || line.startsWith('* ')) {
@@ -554,7 +551,7 @@ class NotionAITool {
           object: 'block',
           type: 'bulleted_list_item',
           bulleted_list_item: {
-            rich_text: [createRichText(line.substring(2))],
+            rich_text: [NotionUtils_1.createRichText(line.substring(2))],
           },
         });
       } else if (line.match(/^\d+\. /)) {
@@ -562,7 +559,7 @@ class NotionAITool {
           object: 'block',
           type: 'numbered_list_item',
           numbered_list_item: {
-            rich_text: [createRichText(line.replace(/^\d+\. /, ''))],
+            rich_text: [NotionUtils_1.createRichText(line.replace(/^\d+\. /, ''))],
           },
         });
       } else if (line.startsWith('> ')) {
@@ -570,7 +567,7 @@ class NotionAITool {
           object: 'block',
           type: 'quote',
           quote: {
-            rich_text: [createRichText(line.substring(2))],
+            rich_text: [NotionUtils_1.createRichText(line.substring(2))],
           },
         });
       } else if (line.startsWith('```')) {
@@ -585,7 +582,7 @@ class NotionAITool {
           object: 'block',
           type: 'code',
           code: {
-            rich_text: [createRichText(codeLines.join('\n'))],
+            rich_text: [NotionUtils_1.createRichText(codeLines.join('\n'))],
             language: 'plain text',
           },
         });
@@ -595,7 +592,7 @@ class NotionAITool {
           object: 'block',
           type: 'paragraph',
           paragraph: {
-            rich_text: [createRichText(line)],
+            rich_text: [NotionUtils_1.createRichText(line)],
           },
         });
       }
@@ -624,7 +621,7 @@ class NotionAITool {
         while ((match = pattern.exec(propertiesString)) !== null) {
           const [, key, value] = match;
           properties[key.trim()] = {
-            rich_text: [createRichText(value.trim())],
+            rich_text: [NotionUtils_1.createRichText(value.trim())],
           };
         }
       }
