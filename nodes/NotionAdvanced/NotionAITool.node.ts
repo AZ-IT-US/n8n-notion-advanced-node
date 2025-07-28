@@ -23,25 +23,28 @@ export class NotionAITool implements INodeType {
     group: ['ai'],
     version: 1,
     subtitle: '={{$parameter["operation"]}}',
-    description: 'AI-powered tool for creating and managing Notion content with natural language',
+    description: 'AI-powered tool for creating and managing Notion content. Designed for use with AI Agent Nodes.',
     defaults: {
       name: 'Notion AI Tool',
     },
+    inputs: [NodeConnectionType.Main],
+    outputs: [NodeConnectionType.Main],
     codex: {
-      categories: ['AI'],
+      categories: ['Productivity', 'AI', 'Documentation'],
       subcategories: {
-        AI: ['Tools'],
+        'Productivity': ['Notion', 'Knowledge Management'],
+        'AI': ['AI Agent Tools', 'Natural Language Processing'],
+        'Documentation': ['Page Creation', 'Content Management']
       },
       resources: {
         primaryDocumentation: [
           {
-            url: 'https://developers.notion.com/',
+            url: 'https://github.com/AZ-IT-US/n8n-notion-advanced-node#ai-tool-usage',
           },
         ],
       },
+      alias: ['notion', 'productivity', 'ai-tool', 'pages', 'database'],
     },
-    inputs: [NodeConnectionType.Main],
-    outputs: [NodeConnectionType.Main],
     credentials: [
       {
         name: 'notionApi',
