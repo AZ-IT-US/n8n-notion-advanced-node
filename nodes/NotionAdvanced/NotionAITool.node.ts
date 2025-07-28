@@ -29,6 +29,7 @@ export class NotionAITool implements INodeType {
     },
     inputs: ['main'],
     outputs: ['main'],
+    usableAsTool: true,
     codex: {
       categories: ['Productivity', 'AI', 'Documentation'],
       subcategories: {
