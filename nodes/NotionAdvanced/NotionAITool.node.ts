@@ -281,22 +281,22 @@ export class NotionAITool implements INodeType {
         
         switch (operation) {
           case 'createPageWithContent':
-            result = await this.createPageWithContent(i);
+            result = await NotionAITool.createPageWithContent(this, i);
             break;
           case 'addContentToPage':
-            result = await this.addContentToPage(i);
+            result = await NotionAITool.addContentToPage(this, i);
             break;
           case 'searchPages':
-            result = await this.searchPages(i);
+            result = await NotionAITool.searchPages(this, i);
             break;
           case 'updatePageProperties':
-            result = await this.updatePageProperties(i);
+            result = await NotionAITool.updatePageProperties(this, i);
             break;
           case 'createDatabaseEntry':
-            result = await this.createDatabaseEntry(i);
+            result = await NotionAITool.createDatabaseEntry(this, i);
             break;
           case 'queryDatabase':
-            result = await this.queryDatabase(i);
+            result = await NotionAITool.queryDatabase(this, i);
             break;
           default:
             throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`);
@@ -322,13 +322,13 @@ export class NotionAITool implements INodeType {
     return [this.helpers.returnJsonArray(responseData)];
   }
 
-  private async createPageWithContent(this: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const pageTitle = this.getNodeParameter('pageTitle', itemIndex) as string;
-    const parentId = this.getNodeParameter('parentId', itemIndex) as string;
-    const content = this.getNodeParameter('content', itemIndex, '') as string;
-    const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
+  static async createPageWithContent(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
+    const pageTitle = executeFunctions.getNodeParameter('pageTitle', itemIndex) as string;
+    const parentId = executeFunctions.getNodeParameter('parentId', itemIndex) as string;
+    const content = executeFunctions.getNodeParameter('content', itemIndex, '') as string;
+    const additionalOptions = executeFunctions.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
 
-    const resolvedParentId = await resolvePageId.call(this, parentId);
+    const resolvedParentId = await resolvePageId.call(executeFunctions, parentId);
 
     // Create the page first
     const pageBody: IDataObject = {
@@ -348,13 +348,13 @@ export class NotionAITool implements INodeType {
       pageBody.cover = { type: 'external', external: { url: additionalOptions.coverUrl as string } };
     }
 
-    const page = await notionApiRequest.call(this, 'POST', '/pages', pageBody);
+    const page = await notionApiRequest.call(executeFunctions, 'POST', '/pages', pageBody);
 
     // If content is provided, add it to the page
     if (content) {
-      const blocks = NotionAITool.prototype.parseContentToBlocks.call(this, content);
+      const blocks = NotionAITool.parseContentToBlocks(content);
       if (blocks.length > 0) {
-        await notionApiRequest.call(this, 'PATCH', `/blocks/${page.id}/children`, {
+        await notionApiRequest.call(executeFunctions, 'PATCH', `/blocks/${page.id}/children`, {
           children: blocks,
         });
       }
@@ -368,18 +368,18 @@ export class NotionAITool implements INodeType {
     };
   }
 
-  private async addContentToPage(this: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const targetPageId = this.getNodeParameter('targetPageId', itemIndex) as string;
-    const content = this.getNodeParameter('content', itemIndex) as string;
+  static async addContentToPage(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
+    const targetPageId = executeFunctions.getNodeParameter('targetPageId', itemIndex) as string;
+    const content = executeFunctions.getNodeParameter('content', itemIndex) as string;
 
-    const resolvedPageId = await resolvePageId.call(this, targetPageId);
-    const blocks = NotionAITool.prototype.parseContentToBlocks.call(this, content);
+    const resolvedPageId = await resolvePageId.call(executeFunctions, targetPageId);
+    const blocks = NotionAITool.parseContentToBlocks(content);
 
     if (blocks.length === 0) {
-      throw new NodeOperationError(this.getNode(), 'No valid content blocks found to add');
+      throw new NodeOperationError(executeFunctions.getNode(), 'No valid content blocks found to add');
     }
 
-    const result = await notionApiRequest.call(this, 'PATCH', `/blocks/${resolvedPageId}/children`, {
+    const result = await notionApiRequest.call(executeFunctions, 'PATCH', `/blocks/${resolvedPageId}/children`, {
       children: blocks,
     });
 
@@ -391,9 +391,9 @@ export class NotionAITool implements INodeType {
     };
   }
 
-  private async searchPages(this: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const searchQuery = this.getNodeParameter('searchQuery', itemIndex, '') as string;
-    const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
+  static async searchPages(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
+    const searchQuery = executeFunctions.getNodeParameter('searchQuery', itemIndex, '') as string;
+    const additionalOptions = executeFunctions.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
     const maxResults = (additionalOptions.maxResults as number) || 20;
 
     const body: IDataObject = {
@@ -409,7 +409,7 @@ export class NotionAITool implements INodeType {
       value: 'page',
     };
 
-    const response = await notionApiRequest.call(this, 'POST', '/search', body);
+    const response = await notionApiRequest.call(executeFunctions, 'POST', '/search', body);
 
     return {
       totalResults: response.results?.length || 0,
@@ -418,14 +418,14 @@ export class NotionAITool implements INodeType {
     };
   }
 
-  private async updatePageProperties(this: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const targetPageId = this.getNodeParameter('targetPageId', itemIndex) as string;
-    const propertiesToUpdate = this.getNodeParameter('propertiesToUpdate', itemIndex) as string;
+  static async updatePageProperties(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
+    const targetPageId = executeFunctions.getNodeParameter('targetPageId', itemIndex) as string;
+    const propertiesToUpdate = executeFunctions.getNodeParameter('propertiesToUpdate', itemIndex) as string;
 
-    const resolvedPageId = await resolvePageId.call(this, targetPageId);
-    const properties = NotionAITool.prototype.parsePropertiesToUpdate.call(this, propertiesToUpdate);
+    const resolvedPageId = await resolvePageId.call(executeFunctions, targetPageId);
+    const properties = NotionAITool.parsePropertiesToUpdate(propertiesToUpdate);
 
-    const result = await notionApiRequest.call(this, 'PATCH', `/pages/${resolvedPageId}`, {
+    const result = await notionApiRequest.call(executeFunctions, 'PATCH', `/pages/${resolvedPageId}`, {
       properties,
     });
 
@@ -437,14 +437,14 @@ export class NotionAITool implements INodeType {
     };
   }
 
-  private async createDatabaseEntry(this: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const parentId = this.getNodeParameter('parentId', itemIndex) as string;
-    const entryProperties = this.getNodeParameter('entryProperties', itemIndex) as string;
+  static async createDatabaseEntry(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
+    const parentId = executeFunctions.getNodeParameter('parentId', itemIndex) as string;
+    const entryProperties = executeFunctions.getNodeParameter('entryProperties', itemIndex) as string;
 
-    const resolvedParentId = await resolvePageId.call(this, parentId);
-    const properties = NotionAITool.prototype.parsePropertiesToUpdate.call(this, entryProperties);
+    const resolvedParentId = await resolvePageId.call(executeFunctions, parentId);
+    const properties = NotionAITool.parsePropertiesToUpdate(entryProperties);
 
-    const result = await notionApiRequest.call(this, 'POST', '/pages', {
+    const result = await notionApiRequest.call(executeFunctions, 'POST', '/pages', {
       parent: { database_id: resolvedParentId },
       properties,
     });
@@ -457,13 +457,13 @@ export class NotionAITool implements INodeType {
     };
   }
 
-  private async queryDatabase(this: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const databaseId = this.getNodeParameter('databaseId', itemIndex) as string;
-    const queryFilter = this.getNodeParameter('queryFilter', itemIndex, '') as string;
-    const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
+  static async queryDatabase(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
+    const databaseId = executeFunctions.getNodeParameter('databaseId', itemIndex) as string;
+    const queryFilter = executeFunctions.getNodeParameter('queryFilter', itemIndex, '') as string;
+    const additionalOptions = executeFunctions.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
     const maxResults = (additionalOptions.maxResults as number) || 20;
 
-    const resolvedDatabaseId = await resolvePageId.call(this, databaseId);
+    const resolvedDatabaseId = await resolvePageId.call(executeFunctions, databaseId);
     const body: IDataObject = {
       page_size: Math.min(maxResults, 100),
     };
@@ -482,7 +482,7 @@ export class NotionAITool implements INodeType {
       }
     }
 
-    const response = await notionApiRequest.call(this, 'POST', `/databases/${resolvedDatabaseId}/query`, body);
+    const response = await notionApiRequest.call(executeFunctions, 'POST', `/databases/${resolvedDatabaseId}/query`, body);
 
     return {
       databaseId: resolvedDatabaseId,
@@ -492,7 +492,7 @@ export class NotionAITool implements INodeType {
     };
   }
 
-  private parseContentToBlocks(content: string): IDataObject[] {
+  static parseContentToBlocks(content: string): IDataObject[] {
     const blocks: IDataObject[] = [];
     const lines = content.split('\n');
     
@@ -580,7 +580,7 @@ export class NotionAITool implements INodeType {
     return blocks;
   }
 
-  private parsePropertiesToUpdate(propertiesString: string): IDataObject {
+  static parsePropertiesToUpdate(propertiesString: string): IDataObject {
     try {
       // Try to parse as JSON first
       return JSON.parse(propertiesString);
