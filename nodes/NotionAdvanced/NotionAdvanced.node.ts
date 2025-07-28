@@ -72,15 +72,15 @@ export class NotionAdvanced implements INodeType {
     displayName: 'Notion Advanced',
     name: 'notionAdvanced',
     icon: 'file:notion.svg',
-    group: ['productivity'],
+    group: ['productivity'] as any,
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
     description: 'Full-featured Notion node with exhaustive block and formatting support using existing credentials',
     defaults: {
       name: 'Notion Advanced',
     },
-    inputs: [NodeConnectionType.Main],
-    outputs: [NodeConnectionType.Main],
+    inputs: ['main'],
+    outputs: ['main'],
     credentials: [
       {
         name: 'notionApi',
@@ -752,8 +752,8 @@ export class NotionAdvanced implements INodeType {
     const pageId = executeFunctions.getNodeParameter('pageId', itemIndex) as string;
     const resolvedId = await resolvePageId.call(executeFunctions, pageId);
     
-    const page: NotionPage = await notionApiRequest.call(executeFunctions, 'GET', `/pages/${resolvedId}`);
-    return page;
+    const page = await notionApiRequest.call(executeFunctions, 'GET', `/pages/${resolvedId}`);
+    return page as IDataObject;
   }
 
   private async updatePage(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {

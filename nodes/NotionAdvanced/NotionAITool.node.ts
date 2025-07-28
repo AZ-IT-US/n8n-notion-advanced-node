@@ -20,15 +20,15 @@ export class NotionAITool implements INodeType {
     displayName: 'Notion AI Tool',
     name: 'notionAiTool',
     icon: 'file:notion.svg',
-    group: ['ai'],
+    group: ['ai'] as any,
     version: 1,
     subtitle: '={{$parameter["operation"]}}',
     description: 'AI-powered tool for creating and managing Notion content. Designed for use with AI Agent Nodes.',
     defaults: {
       name: 'Notion AI Tool',
     },
-    inputs: [NodeConnectionType.Main],
-    outputs: [NodeConnectionType.Main],
+    inputs: ['main'],
+    outputs: ['main'],
     codex: {
       categories: ['Productivity', 'AI', 'Documentation'],
       subcategories: {

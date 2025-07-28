@@ -51,7 +51,11 @@ export async function notionApiRequest(
   try {
     return await this.helpers.httpRequest(options);
   } catch (error) {
-    throw new NodeApiError(this.getNode(), error as Error);
+    throw new NodeApiError(this.getNode(), {
+      message: (error as Error).message,
+      description: 'Failed to make Notion API request',
+      httpCode: (error as any).status || (error as any).statusCode || 500,
+    });
   }
 }
 
