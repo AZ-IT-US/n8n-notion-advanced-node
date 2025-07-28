@@ -5,6 +5,7 @@ import {
   INodeTypeDescription,
   IDataObject,
   NodeOperationError,
+  NodeConnectionType,
 } from 'n8n-workflow';
 
 import {
@@ -78,8 +79,8 @@ export class NotionAdvanced implements INodeType {
     defaults: {
       name: 'Notion Advanced',
     },
-    inputs: ['main'],
-    outputs: ['main'],
+    inputs: [NodeConnectionType.Main],
+    outputs: [NodeConnectionType.Main],
     credentials: [
       {
         name: 'notionApi',
@@ -603,14 +604,15 @@ export class NotionAdvanced implements INodeType {
 
         let item: IDataObject;
 
+        const nodeInstance = this.constructor.prototype;
         if (resource === 'page') {
-          item = await this.executePage(this, operation, i);
+          item = await nodeInstance.executePage.call(nodeInstance, this, operation, i);
         } else if (resource === 'block') {
-          item = await this.executeBlock(this, operation, i);
+          item = await nodeInstance.executeBlock.call(nodeInstance, this, operation, i);
         } else if (resource === 'database') {
-          item = await this.executeDatabase(this, operation, i);
+          item = await nodeInstance.executeDatabase.call(nodeInstance, this, operation, i);
         } else if (resource === 'user') {
-          item = await this.executeUser(this, operation, i);
+          item = await nodeInstance.executeUser.call(nodeInstance, this, operation, i);
         } else {
           throw new NodeOperationError(this.getNode(), `Unknown resource: ${resource}`);
         }

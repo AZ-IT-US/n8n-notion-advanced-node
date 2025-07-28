@@ -42,7 +42,7 @@ export async function notionApiRequest(
       'Notion-Version': '2022-06-28',
       'Content-Type': 'application/json',
     },
-    uri: `https://api.notion.com/v1${endpoint}`,
+    url: `https://api.notion.com/v1${endpoint}`,
     body,
     qs,
     json: true,
