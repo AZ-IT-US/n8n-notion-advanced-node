@@ -1,4 +1,4 @@
-const { NodeConnectionType, NodeOperationError } = require('n8n-workflow');
+const { NodeOperationError } = require('n8n-workflow');
 
 const {
   notionApiRequest,
@@ -20,8 +20,24 @@ class NotionAITool {
       defaults: {
         name: 'Notion AI Tool',
       },
-      inputs: [NodeConnectionType.Main],
-      outputs: [NodeConnectionType.Main],
+      inputs: ['main'],
+      outputs: ['main'],
+      codex: {
+        categories: ['Productivity', 'AI', 'Documentation'],
+        subcategories: {
+          'Productivity': ['Notion', 'Knowledge Management'],
+          'AI': ['AI Agent Tools', 'Natural Language Processing'],
+          'Documentation': ['Page Creation', 'Content Management']
+        },
+        resources: {
+          primaryDocumentation: [
+            {
+              url: 'https://github.com/AZ-IT-US/n8n-notion-advanced-node#ai-tool-usage',
+            },
+          ],
+        },
+        alias: ['notion', 'productivity', 'ai-tool', 'pages', 'database'],
+      },
       credentials: [
         {
           name: 'notionApi',
