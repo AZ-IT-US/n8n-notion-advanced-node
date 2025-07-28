@@ -281,22 +281,22 @@ export class NotionAITool implements INodeType {
         
         switch (operation) {
           case 'createPageWithContent':
-            result = await NotionAITool.prototype.createPageWithContent.call(this, i);
+            result = await this.createPageWithContent(i);
             break;
           case 'addContentToPage':
-            result = await NotionAITool.prototype.addContentToPage.call(this, i);
+            result = await this.addContentToPage(i);
             break;
           case 'searchPages':
-            result = await NotionAITool.prototype.searchPages.call(this, i);
+            result = await this.searchPages(i);
             break;
           case 'updatePageProperties':
-            result = await NotionAITool.prototype.updatePageProperties.call(this, i);
+            result = await this.updatePageProperties(i);
             break;
           case 'createDatabaseEntry':
-            result = await NotionAITool.prototype.createDatabaseEntry.call(this, i);
+            result = await this.createDatabaseEntry(i);
             break;
           case 'queryDatabase':
-            result = await NotionAITool.prototype.queryDatabase.call(this, i);
+            result = await this.queryDatabase(i);
             break;
           default:
             throw new NodeOperationError(this.getNode(), `Unknown operation: ${operation}`);
