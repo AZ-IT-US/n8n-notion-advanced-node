@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-notion-advanced",
-  "version": "1.1.0",
+  "version": "1.1.9-beta",
   "description": "Advanced n8n Notion nodes: Full-featured workflow node + AI Agent Tool for intelligent Notion automation with 25+ block types (BETA)",
   "main": "dist/index.js",
   "scripts": {
