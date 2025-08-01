@@ -8,6 +8,8 @@ import {
   NodeConnectionType,
 } from 'n8n-workflow';
 
+import { randomUUID } from 'crypto';
+
 import {
   notionApiRequest,
   validateCredentials,
@@ -27,6 +29,16 @@ import {
   createCodeBlock,
   createParagraphBlock,
 } from './NotionUtils';
+
+// Interface for XML tag matching and processing
+interface TagMatch {
+  start: number;
+  end: number;
+  match: string;
+  processor: (match: string, group1?: string, group2?: string, group3?: string) => string;
+  groups: string[];
+  replacement?: string;
+}
 
 export class NotionAITool implements INodeType {
   description: INodeTypeDescription = {
@@ -522,8 +534,8 @@ export class NotionAITool implements INodeType {
       const line = lines[i];
       const trimmedLine = line.trim();
       
-      // Skip completely empty lines and XML placeholders
-      if (!trimmedLine || trimmedLine.startsWith('__XML_BLOCK_')) continue;
+      // Skip completely empty lines and XML placeholders (now using dynamic prefix check)
+      if (!trimmedLine || /__XML_[a-f0-9]{8}_\d+__/.test(trimmedLine)) continue;
 
       // Traditional markdown patterns (for backwards compatibility)
       if (trimmedLine.startsWith('# ')) {
@@ -699,10 +711,80 @@ export class NotionAITool implements INodeType {
     return blocks;
   }
 
+  // Helper function to resolve overlapping tag matches
+  static resolveOverlaps(matches: TagMatch[]): TagMatch[] {
+    const resolved: TagMatch[] = [];
+    const sorted = matches.sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      return (b.end - b.start) - (a.end - a.start); // Prefer longer matches
+    });
+    
+    for (const match of sorted) {
+      const hasOverlap = resolved.some(existing =>
+        (match.start < existing.end && match.end > existing.start)
+      );
+      if (!hasOverlap) {
+        resolved.push(match);
+      }
+    }
+    return resolved;
+  }
+
+  // Helper function to validate XML tag structure
+  static validateXmlTag(match: string, tagName: string): boolean {
+    try {
+      // Basic validation for well-formed tags
+      const openTag = new RegExp(`<${tagName}[^>]*>`, 'i');
+      const closeTag = new RegExp(`</${tagName}>`, 'i');
+      
+      if (!openTag.test(match) || !closeTag.test(match)) {
+        console.warn(`Malformed XML tag detected: ${match.substring(0, 50)}...`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.warn(`Error validating XML tag: ${error}`);
+      return false;
+    }
+  }
+
+  // Helper function for optimized string replacement
+  static optimizedReplace(content: string, matches: { start: number; end: number; replacement: string; match: string; }[]): string {
+    if (matches.length === 0) return content;
+    
+    const parts: string[] = [];
+    let lastIndex = 0;
+    
+    matches.forEach(({ start, end, replacement }) => {
+      parts.push(content.substring(lastIndex, start));
+      parts.push(replacement);
+      lastIndex = end;
+    });
+    parts.push(content.substring(lastIndex));
+    
+    return parts.join('');
+  }
+
+  // Helper function for Unicode-safe position calculation
+  static getUtf8BytePosition(str: string, charIndex: number): number {
+    try {
+      return Buffer.from(str.substring(0, charIndex), 'utf8').length;
+    } catch (error) {
+      // Fallback to character index if Buffer operations fail
+      return charIndex;
+    }
+  }
+
   // New XML-like tag processing function
   static processXmlTags(content: string, blocks: IDataObject[]): string {
     let processedContent = content;
     let blockCounter = 0;
+    
+    // Generate unique placeholder prefix to avoid collisions
+    const placeholderPrefix = `__XML_${randomUUID().slice(0, 8)}_`;
+    
+    // Debug mode for development
+    const DEBUG_ORDERING = process.env.NODE_ENV === 'development';
 
     // Define all tag processors
     const tagProcessors = [
@@ -720,7 +802,7 @@ export class NotionAITool implements INodeType {
               color: color,
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -735,7 +817,7 @@ export class NotionAITool implements INodeType {
               language: language === 'plain text' ? 'plain_text' : language,
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -752,7 +834,7 @@ export class NotionAITool implements INodeType {
               caption: captionText ? NotionAITool.parseBasicMarkdown(captionText) : [],
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -768,7 +850,7 @@ export class NotionAITool implements INodeType {
               caption: alt ? NotionAITool.parseBasicMarkdown(alt) : [],
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -782,7 +864,7 @@ export class NotionAITool implements INodeType {
               expression: expression.trim(),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -796,7 +878,7 @@ export class NotionAITool implements INodeType {
               url: url.trim(),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -810,7 +892,7 @@ export class NotionAITool implements INodeType {
               url: url.trim(),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -825,7 +907,7 @@ export class NotionAITool implements INodeType {
               children: [],
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -839,7 +921,7 @@ export class NotionAITool implements INodeType {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -851,7 +933,7 @@ export class NotionAITool implements INodeType {
             type: 'divider',
             divider: {},
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -867,7 +949,7 @@ export class NotionAITool implements INodeType {
               checked: isChecked,
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -882,7 +964,7 @@ export class NotionAITool implements INodeType {
               rich_text: [createRichText(content.trim())],
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -896,7 +978,7 @@ export class NotionAITool implements INodeType {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -906,7 +988,7 @@ export class NotionAITool implements INodeType {
         processor: (match: string, listContent: string) => {
           // Process nested lists by flattening them first
           NotionAITool.processNestedList(listContent, 'bulleted_list_item', blocks);
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -916,7 +998,7 @@ export class NotionAITool implements INodeType {
         processor: (match: string, listContent: string) => {
           // Process nested lists by flattening them first
           NotionAITool.processNestedList(listContent, 'numbered_list_item', blocks);
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -930,7 +1012,7 @@ export class NotionAITool implements INodeType {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -945,7 +1027,7 @@ export class NotionAITool implements INodeType {
               language: 'plain_text',
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -961,7 +1043,7 @@ export class NotionAITool implements INodeType {
               },
             });
           }
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -975,7 +1057,7 @@ export class NotionAITool implements INodeType {
               rich_text: NotionAITool.parseBasicMarkdown(`**${content.trim()}**`),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -989,7 +1071,7 @@ export class NotionAITool implements INodeType {
               rich_text: NotionAITool.parseBasicMarkdown(`*${content.trim()}*`),
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
@@ -1003,20 +1085,12 @@ export class NotionAITool implements INodeType {
               rich_text: [createRichText('')],
             },
           });
-          return `__XML_BLOCK_${blockCounter++}__`;
+          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
     ];
 
     // Find all XML tags with their positions to maintain order
-    interface TagMatch {
-      start: number;
-      end: number;
-      match: string;
-      processor: (match: string, group1?: string, group2?: string, group3?: string) => string;
-      groups: string[];
-    }
-
     const allMatches: TagMatch[] = [];
 
     // Collect all matches from all processors
@@ -1024,9 +1098,18 @@ export class NotionAITool implements INodeType {
       const globalRegex = new RegExp(regex.source, 'gis');
       let match;
       while ((match = globalRegex.exec(processedContent)) !== null) {
+        // Use Unicode-safe position calculation for non-ASCII content
+        const hasUnicode = /[^\x00-\x7F]/.test(processedContent);
+        const start = hasUnicode ?
+          NotionAITool.getUtf8BytePosition(processedContent, match.index) :
+          match.index;
+        const end = hasUnicode ?
+          NotionAITool.getUtf8BytePosition(processedContent, match.index + match[0].length) :
+          match.index + match[0].length;
+          
         allMatches.push({
-          start: match.index,
-          end: match.index + match[0].length,
+          start,
+          end,
           match: match[0],
           processor,
           groups: match.slice(1) // Capture groups
@@ -1034,39 +1117,66 @@ export class NotionAITool implements INodeType {
       }
     });
 
+    // Resolve overlapping tags
+    const resolvedMatches = NotionAITool.resolveOverlaps(allMatches);
+    
     // Sort matches by position to maintain order
-    allMatches.sort((a, b) => a.start - b.start);
+    resolvedMatches.sort((a, b) => a.start - b.start);
 
-    // Process matches in order, adjusting positions as we replace content
-    let offset = 0;
-    allMatches.forEach(({ start, end, match, processor, groups }) => {
-      const adjustedStart = start + offset;
-      const adjustedEnd = end + offset;
-      
-      // Process this match
-      const replacement = processor(match, groups[0] || '', groups[1] || '', groups[2] || '');
-      
-      // Replace in content
-      processedContent = processedContent.substring(0, adjustedStart) +
-                        replacement +
-                        processedContent.substring(adjustedEnd);
-      
-      // Update offset for next replacements
-      offset += replacement.length - match.length;
+    // Add validation and preprocessing
+    const validMatches = resolvedMatches.filter(({ match }) => {
+      const tagName = match.match(/<(\w+)/)?.[1];
+      return tagName ? NotionAITool.validateXmlTag(match, tagName) : true;
     });
 
+    // Debug logging
+    if (DEBUG_ORDERING && validMatches.length > 0) {
+      console.log('XML Tags Processing Order:', validMatches.map(m => ({
+        type: m.match.match(/<(\w+)/)?.[1],
+        start: m.start,
+        content: m.match.substring(0, 50) + (m.match.length > 50 ? '...' : '')
+      })));
+    }
+
+    // Process matches with enhanced replacement system
+    const processedMatches = validMatches.map(({ start, end, match, processor, groups }) => {
+      try {
+        const replacement = processor(match, groups[0] || '', groups[1] || '', groups[2] || '');
+        return { start, end, replacement, match };
+      } catch (error) {
+        console.warn(`Error processing XML tag: ${match.substring(0, 50)}...`, error);
+        return { start, end, replacement: match, match }; // Return original if processing fails
+      }
+    });
+
+    // Use optimized replacement for better performance
+    if (processedMatches.length > 0) {
+      processedContent = NotionAITool.optimizedReplace(processedContent, processedMatches);
+    }
+
     // Clean up any remaining HTML tags that weren't processed
-    processedContent = NotionAITool.cleanupRemainingHtml(processedContent);
+    processedContent = NotionAITool.cleanupRemainingHtml(processedContent, placeholderPrefix);
+    
+    if (DEBUG_ORDERING) {
+      console.log(`Processed ${validMatches.length} XML tags, created ${blockCounter} blocks`);
+    }
 
     return processedContent;
   }
 
   // Cleanup function to remove remaining HTML tags and XML_BLOCK artifacts
-  static cleanupRemainingHtml(content: string): string {
+  static cleanupRemainingHtml(content: string, placeholderPrefix?: string): string {
     let cleaned = content;
     
-    // Remove XML_BLOCK placeholder artifacts
-    cleaned = cleaned.replace(/__XML_BLOCK_\d+__/g, '');
+    // Remove XML_BLOCK placeholder artifacts (support both old and new format)
+    if (placeholderPrefix) {
+      const placeholderRegex = new RegExp(`${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+__`, 'g');
+      cleaned = cleaned.replace(placeholderRegex, '');
+    } else {
+      // Fallback for backward compatibility
+      cleaned = cleaned.replace(/__XML_BLOCK_\d+__/g, '');
+      cleaned = cleaned.replace(/__XML_[a-f0-9]{8}_\d+__/g, '');
+    }
     
     // Remove common HTML tags that might be left behind
     const htmlTagsToRemove = [
@@ -1101,6 +1211,7 @@ export class NotionAITool implements INodeType {
     
     // Remove lines that contain only XML_BLOCK artifacts
     cleaned = cleaned.replace(/^.*__XML_BLOCK_\d+__.*$/gm, '');
+    cleaned = cleaned.replace(/^.*__XML_[a-f0-9]{8}_\d+__.*$/gm, '');
     
     return cleaned.trim();
   }
