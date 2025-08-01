@@ -559,6 +559,18 @@ export class NotionAITool implements INodeType {
       
       // Skip completely empty lines and XML placeholders (now using dynamic prefix check)
       if (!trimmedLine || /__XML_[a-f0-9]{8}_\d+__/.test(trimmedLine)) continue;
+      
+      // Skip lines that contain XML tag patterns (to prevent double processing)
+      const xmlTagPatterns = [
+        /<[^>]+>/,                           // Any XML/HTML tag
+        /&lt;[^&]+&gt;/,                     // HTML-encoded tags
+        /<(h[1-6]|p|ul|ol|li|strong|em|b|i|code|blockquote|callout|todo|image|embed|bookmark|equation|toggle|divider|quote|pre)\b[^>]*>/i,
+      ];
+      
+      const hasXmlTags = xmlTagPatterns.some(pattern => pattern.test(trimmedLine));
+      if (hasXmlTags) {
+        continue; // Skip processing this line as it contains XML content that should be handled hierarchically
+      }
 
       // Traditional markdown patterns (for backwards compatibility)
       if (trimmedLine.startsWith('# ')) {
@@ -1387,6 +1399,17 @@ export class NotionAITool implements INodeType {
       cleaned = cleaned.replace(pattern, '');
     });
     
+    // Remove entire lines containing XML content to prevent double processing
+    const xmlContentLines = [
+      /^.*<[^>]+>.*$/gm,                           // Any line with XML/HTML tags
+      /^.*&lt;[^&]+&gt;.*$/gm,                    // HTML-encoded tags
+      /^.*<(h[1-6]|p|ul|ol|li|strong|em|b|i|code|blockquote|callout|todo|image|embed|bookmark|equation|toggle|divider|quote|pre)\b[^>]*>.*$/gim, // Specific XML content
+    ];
+
+    xmlContentLines.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+    
     // Remove common HTML tags that might be left behind
     const htmlTagsToRemove = [
       /<\/?ul\s*[^>]*>/gi,
@@ -1405,6 +1428,18 @@ export class NotionAITool implements INodeType {
       /<\/?s\s*[^>]*>/gi,
       /<\/?del\s*[^>]*>/gi,
       /<\/?mark\s*[^>]*>/gi,
+      /<\/?h[1-6]\s*[^>]*>/gi,
+      /<\/?blockquote\s*[^>]*>/gi,
+      /<\/?callout\s*[^>]*>/gi,
+      /<\/?todo\s*[^>]*>/gi,
+      /<\/?image\s*[^>]*>/gi,
+      /<\/?embed\s*[^>]*>/gi,
+      /<\/?bookmark\s*[^>]*>/gi,
+      /<\/?equation\s*[^>]*>/gi,
+      /<\/?toggle\s*[^>]*>/gi,
+      /<\/?quote\s*[^>]*>/gi,
+      /<\/?pre\s*[^>]*>/gi,
+      /<\/?divider\s*[^>]*>/gi,
       /<br\s*\/?>/gi,
     ];
 
