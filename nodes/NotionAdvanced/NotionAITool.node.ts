@@ -907,7 +907,11 @@ export class NotionAITool implements INodeType {
           // Extract individual list items and process them
           const items = listContent.match(/<li\s*[^>]*>(.*?)<\/li>/gis) || [];
           items.forEach(item => {
-            const itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
+            let itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
+            
+            // Clean up nested HTML tags and convert to markdown-compatible format
+            itemContent = NotionAITool.processNestedHtmlInListItem(itemContent);
+            
             if (itemContent) {
               blocks.push({
                 type: 'bulleted_list_item',
@@ -928,7 +932,11 @@ export class NotionAITool implements INodeType {
           // Extract individual list items and process them
           const items = listContent.match(/<li\s*[^>]*>(.*?)<\/li>/gis) || [];
           items.forEach(item => {
-            const itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
+            let itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
+            
+            // Clean up nested HTML tags and convert to markdown-compatible format
+            itemContent = NotionAITool.processNestedHtmlInListItem(itemContent);
+            
             if (itemContent) {
               blocks.push({
                 type: 'numbered_list_item',
@@ -1043,9 +1051,12 @@ export class NotionAITool implements INodeType {
     return processedContent;
   }
 
-  // Cleanup function to remove remaining HTML tags
+  // Cleanup function to remove remaining HTML tags and XML_BLOCK artifacts
   static cleanupRemainingHtml(content: string): string {
     let cleaned = content;
+    
+    // Remove XML_BLOCK placeholder artifacts
+    cleaned = cleaned.replace(/__XML_BLOCK_\d+__/g, '');
     
     // Remove common HTML tags that might be left behind
     const htmlTagsToRemove = [
@@ -1058,6 +1069,13 @@ export class NotionAITool implements INodeType {
       /<\/?i\s*[^>]*>/gi,
       /<\/?div\s*[^>]*>/gi,
       /<\/?span\s*[^>]*>/gi,
+      /<\/?p\s*[^>]*>/gi,
+      /<\/?a\s*[^>]*>/gi,
+      /<\/?code\s*[^>]*>/gi,
+      /<\/?u\s*[^>]*>/gi,
+      /<\/?s\s*[^>]*>/gi,
+      /<\/?del\s*[^>]*>/gi,
+      /<\/?mark\s*[^>]*>/gi,
       /<br\s*\/?>/gi,
     ];
 
@@ -1071,7 +1089,54 @@ export class NotionAITool implements INodeType {
     // Remove multiple consecutive line breaks
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
     
+    // Remove lines that contain only XML_BLOCK artifacts
+    cleaned = cleaned.replace(/^.*__XML_BLOCK_\d+__.*$/gm, '');
+    
     return cleaned.trim();
+  }
+
+  // Helper function to process nested HTML elements in list items
+  static processNestedHtmlInListItem(content: string): string {
+    let processed = content;
+
+    // First, remove wrapping <p> tags (common in nested content)
+    processed = processed.replace(/^<p\s*[^>]*>(.*?)<\/p>$/gis, '$1');
+    
+    // Convert HTML formatting tags to markdown equivalents
+    const htmlToMarkdown = [
+      { regex: /<strong\s*[^>]*>(.*?)<\/strong>/gis, replacement: '**$1**' },
+      { regex: /<b\s*[^>]*>(.*?)<\/b>/gis, replacement: '**$1**' },
+      { regex: /<em\s*[^>]*>(.*?)<\/em>/gis, replacement: '*$1*' },
+      { regex: /<i\s*[^>]*>(.*?)<\/i>/gis, replacement: '*$1*' },
+      { regex: /<code\s*[^>]*>(.*?)<\/code>/gis, replacement: '`$1`' },
+      { regex: /<a\s+href="([^"]*)"[^>]*>(.*?)<\/a>/gis, replacement: '[$2]($1)' },
+      { regex: /<u\s*[^>]*>(.*?)<\/u>/gis, replacement: '$1' }, // Notion doesn't support underline
+      { regex: /<s\s*[^>]*>(.*?)<\/s>/gis, replacement: '~~$1~~' },
+      { regex: /<del\s*[^>]*>(.*?)<\/del>/gis, replacement: '~~$1~~' },
+      { regex: /<mark\s*[^>]*>(.*?)<\/mark>/gis, replacement: '$1' }, // Notion doesn't support highlight in rich text
+    ];
+
+    // Apply HTML to markdown conversions
+    htmlToMarkdown.forEach(({ regex, replacement }) => {
+      processed = processed.replace(regex, replacement);
+    });
+
+    // Remove any remaining HTML tags that we don't handle
+    const tagsToRemove = [
+      /<\/?div\s*[^>]*>/gi,
+      /<\/?span\s*[^>]*>/gi,
+      /<\/?p\s*[^>]*>/gi,
+      /<br\s*\/?>/gi,
+    ];
+
+    tagsToRemove.forEach(regex => {
+      processed = processed.replace(regex, ' ');
+    });
+
+    // Clean up extra whitespace
+    processed = processed.replace(/\s+/g, ' ').trim();
+
+    return processed;
   }
 
   // Helper function to get callout emoji based on type
