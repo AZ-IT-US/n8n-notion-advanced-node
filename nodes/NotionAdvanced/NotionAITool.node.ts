@@ -704,7 +704,7 @@ export class NotionAITool implements INodeType {
     let processedContent = content;
     let blockCounter = 0;
 
-    // Process XML-like tags in order of priority
+    // Define all tag processors
     const tagProcessors = [
       // Callouts: <callout type="info">content</callout>
       {
@@ -1008,11 +1008,51 @@ export class NotionAITool implements INodeType {
       },
     ];
 
-    // Process each tag type
+    // Find all XML tags with their positions to maintain order
+    interface TagMatch {
+      start: number;
+      end: number;
+      match: string;
+      processor: (match: string, group1?: string, group2?: string, group3?: string) => string;
+      groups: string[];
+    }
+
+    const allMatches: TagMatch[] = [];
+
+    // Collect all matches from all processors
     tagProcessors.forEach(({ regex, processor }) => {
-      processedContent = processedContent.replace(regex, (match: string, group1?: string, group2?: string, group3?: string) => {
-        return processor(match, group1 || '', group2 || '', group3 || '');
-      });
+      const globalRegex = new RegExp(regex.source, 'gis');
+      let match;
+      while ((match = globalRegex.exec(processedContent)) !== null) {
+        allMatches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          match: match[0],
+          processor,
+          groups: match.slice(1) // Capture groups
+        });
+      }
+    });
+
+    // Sort matches by position to maintain order
+    allMatches.sort((a, b) => a.start - b.start);
+
+    // Process matches in order, adjusting positions as we replace content
+    let offset = 0;
+    allMatches.forEach(({ start, end, match, processor, groups }) => {
+      const adjustedStart = start + offset;
+      const adjustedEnd = end + offset;
+      
+      // Process this match
+      const replacement = processor(match, groups[0] || '', groups[1] || '', groups[2] || '');
+      
+      // Replace in content
+      processedContent = processedContent.substring(0, adjustedStart) +
+                        replacement +
+                        processedContent.substring(adjustedEnd);
+      
+      // Update offset for next replacements
+      offset += replacement.length - match.length;
     });
 
     // Clean up any remaining HTML tags that weren't processed
