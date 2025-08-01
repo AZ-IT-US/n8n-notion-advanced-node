@@ -40,6 +40,29 @@ interface TagMatch {
   replacement?: string;
 }
 
+// Interface for hierarchical XML tree structure
+interface XMLNode {
+  id: string;
+  tagName: string;
+  start: number;
+  end: number;
+  match: string;
+  processor: (...args: string[]) => IDataObject | null;
+  groups: string[];
+  children: XMLNode[];
+  parent?: XMLNode;
+  depth: number;
+  innerContent: string;
+  replacement?: string;
+  listProcessor?: (content: string, blocks: IDataObject[]) => void;
+}
+
+// Interface for processing results
+interface ProcessingResult {
+  blocks: IDataObject[];
+  processedContent: string;
+}
+
 export class NotionAITool implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Notion AI Tool',
@@ -775,10 +798,171 @@ export class NotionAITool implements INodeType {
     }
   }
 
-  // New XML-like tag processing function
+  // Build hierarchical XML tree structure
+  static buildXMLTree(content: string, tagProcessors: any[]): XMLNode[] {
+    const allMatches: XMLNode[] = [];
+    
+    // Collect all XML tags with their positions
+    tagProcessors.forEach(({ regex, blockCreator, listProcessor }) => {
+      const globalRegex = new RegExp(regex.source, 'gis');
+      let match;
+      while ((match = globalRegex.exec(content)) !== null) {
+        const tagName = match[0].match(/<(\w+)/)?.[1] || 'unknown';
+        allMatches.push({
+          id: `${tagName}_${match.index}_${Date.now()}_${Math.random()}`,
+          tagName,
+          start: match.index,
+          end: match.index + match[0].length,
+          match: match[0],
+          processor: blockCreator,
+          groups: match.slice(1),
+          children: [],
+          depth: 0,
+          innerContent: match[0],
+          replacement: undefined,
+          listProcessor
+        });
+      }
+    });
+
+    // Sort by start position
+    allMatches.sort((a, b) => a.start - b.start);
+
+    // Build parent-child relationships
+    const rootNodes: XMLNode[] = [];
+    const nodeStack: XMLNode[] = [];
+
+    for (const node of allMatches) {
+      // Pop nodes from stack that don't contain this node
+      while (nodeStack.length > 0 && nodeStack[nodeStack.length - 1].end <= node.start) {
+        nodeStack.pop();
+      }
+
+      // Set depth based on stack size
+      node.depth = nodeStack.length;
+
+      // If there's a parent on the stack, add this as its child
+      if (nodeStack.length > 0) {
+        const parent = nodeStack[nodeStack.length - 1];
+        node.parent = parent;
+        parent.children.push(node);
+      } else {
+        // This is a root node
+        rootNodes.push(node);
+      }
+
+      // Only push self-contained tags to stack (not self-closing)
+      if (!node.match.endsWith('/>') && node.match.includes('</')) {
+        nodeStack.push(node);
+      }
+    }
+
+    return rootNodes;
+  }
+
+  // Process XML tree depth-first (children before parents)
+  static processXMLTreeDepthFirst(nodes: XMLNode[], blocks: IDataObject[], placeholderPrefix: string): Map<string, string> {
+    const replacements = new Map<string, string>();
+    let blockCounter = 0;
+
+    const processNode = (node: XMLNode): string => {
+      // First, process all children depth-first
+      for (const child of node.children) {
+        const childReplacement = processNode(child);
+        replacements.set(child.id, childReplacement);
+      }
+
+      // Extract inner content (content between opening and closing tags)
+      let innerContent = node.innerContent;
+      
+      // Extract content between opening and closing tags
+      const openTagMatch = node.match.match(/^<[^>]+>/);
+      const closeTagMatch = node.match.match(/<\/[^>]+>$/);
+      
+      if (openTagMatch && closeTagMatch) {
+        const openTag = openTagMatch[0];
+        const closeTag = closeTagMatch[0];
+        const startIndex = node.match.indexOf(openTag) + openTag.length;
+        const endIndex = node.match.lastIndexOf(closeTag);
+        innerContent = node.match.substring(startIndex, endIndex);
+        
+        // Replace child nodes in inner content with their processed content
+        for (const child of node.children) {
+          const childReplacement = replacements.get(child.id) || '';
+          innerContent = innerContent.replace(child.match, childReplacement);
+        }
+      }
+
+      // Process this node with updated inner content
+      try {
+        // Handle special list processors
+        if (node.listProcessor && (node.tagName === 'ul' || node.tagName === 'ol')) {
+          node.listProcessor(innerContent, blocks);
+          return `${placeholderPrefix}${blockCounter++}__`;
+        }
+        
+        // Use blockCreator to create the block
+        const block = node.processor(...node.groups);
+        
+        if (block) {
+          blocks.push(block);
+        }
+        
+        return `${placeholderPrefix}${blockCounter++}__`;
+      } catch (error) {
+        console.warn(`Error processing XML node ${node.tagName}:`, error);
+        return node.match; // Return original if processing fails
+      }
+    };
+
+    // Process all root nodes
+    for (const rootNode of nodes) {
+      const replacement = processNode(rootNode);
+      replacements.set(rootNode.id, replacement);
+    }
+
+    return replacements;
+  }
+
+  // Apply hierarchical replacements to content
+  static applyHierarchicalReplacements(content: string, nodes: XMLNode[], replacements: Map<string, string>): string {
+    let processedContent = content;
+    
+    // Sort nodes by start position in reverse order to avoid position shifts
+    const allNodes = this.getAllNodesFromTree(nodes);
+    allNodes.sort((a, b) => b.start - a.start);
+    
+    // Apply replacements from end to beginning
+    for (const node of allNodes) {
+      const replacement = replacements.get(node.id);
+      if (replacement !== undefined) {
+        processedContent = processedContent.substring(0, node.start) +
+                          replacement +
+                          processedContent.substring(node.end);
+      }
+    }
+    
+    return processedContent;
+  }
+
+  // Helper function to get all nodes from tree (flattened)
+  static getAllNodesFromTree(nodes: XMLNode[]): XMLNode[] {
+    const allNodes: XMLNode[] = [];
+    
+    const collectNodes = (nodeList: XMLNode[]) => {
+      for (const node of nodeList) {
+        allNodes.push(node);
+        collectNodes(node.children);
+      }
+    };
+    
+    collectNodes(nodes);
+    return allNodes;
+  }
+
+  // New hierarchical XML-like tag processing function
   static processXmlTags(content: string, blocks: IDataObject[]): string {
     let processedContent = content;
-    let blockCounter = 0;
     
     // Generate unique placeholder prefix to avoid collisions
     const placeholderPrefix = `__XML_${randomUUID().slice(0, 8)}_`;
@@ -791,374 +975,364 @@ export class NotionAITool implements INodeType {
       // Callouts: <callout type="info">content</callout>
       {
         regex: /<callout\s*(?:type="([^"]*)")?\s*>(.*?)<\/callout>/gis,
-        processor: (match: string, type: string = 'info', content: string) => {
+        blockCreator: (type: string = 'info', content: string) => {
           const emoji = NotionAITool.getCalloutEmoji(type.toLowerCase());
           const color = NotionAITool.getCalloutColor(type.toLowerCase());
-          blocks.push({
+          return {
             type: 'callout',
             callout: {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
               icon: { type: 'emoji', emoji },
               color: color,
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Code blocks: <code language="javascript">content</code>
       {
         regex: /<code\s*(?:language="([^"]*)")?\s*>(.*?)<\/code>/gis,
-        processor: (match: string, language: string = 'plain_text', content: string) => {
-          blocks.push({
+        blockCreator: (language: string = 'plain_text', content: string) => {
+          return {
             type: 'code',
             code: {
               rich_text: [createRichText(content.trim())],
               language: language === 'plain text' ? 'plain_text' : language,
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Images: <image src="url" alt="description">caption</image>
       {
         regex: /<image\s+src="([^"]*)"(?:\s+alt="([^"]*)")?\s*>(.*?)<\/image>/gis,
-        processor: (match: string, src: string, alt: string = '', caption: string = '') => {
+        blockCreator: (src: string, alt: string = '', caption: string = '') => {
           const captionText = caption.trim() || alt;
-          blocks.push({
+          return {
             type: 'image',
             image: {
               type: 'external',
               external: { url: src },
               caption: captionText ? NotionAITool.parseBasicMarkdown(captionText) : [],
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Self-closing images: <image src="url" alt="description"/>
       {
         regex: /<image\s+src="([^"]*)"(?:\s+alt="([^"]*)")?\s*\/>/gis,
-        processor: (match: string, src: string, alt: string = '') => {
-          blocks.push({
+        blockCreator: (src: string, alt: string = '') => {
+          return {
             type: 'image',
             image: {
               type: 'external',
               external: { url: src },
               caption: alt ? NotionAITool.parseBasicMarkdown(alt) : [],
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Equations: <equation>E=mc^2</equation>
       {
         regex: /<equation>(.*?)<\/equation>/gis,
-        processor: (match: string, expression: string) => {
-          blocks.push({
+        blockCreator: (expression: string) => {
+          return {
             type: 'equation',
             equation: {
               expression: expression.trim(),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Embeds: <embed>url</embed>
       {
         regex: /<embed>(.*?)<\/embed>/gis,
-        processor: (match: string, url: string) => {
-          blocks.push({
+        blockCreator: (url: string) => {
+          return {
             type: 'embed',
             embed: {
               url: url.trim(),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Bookmarks: <bookmark>url</bookmark>
       {
         regex: /<bookmark>(.*?)<\/bookmark>/gis,
-        processor: (match: string, url: string) => {
-          blocks.push({
+        blockCreator: (url: string) => {
+          return {
             type: 'bookmark',
             bookmark: {
               url: url.trim(),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Toggles: <toggle>title</toggle>
       {
         regex: /<toggle>(.*?)<\/toggle>/gis,
-        processor: (match: string, title: string) => {
-          blocks.push({
+        blockCreator: (title: string) => {
+          return {
             type: 'toggle',
             toggle: {
               rich_text: NotionAITool.parseBasicMarkdown(title.trim()),
               children: [],
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Quotes: <quote>content</quote>
       {
         regex: /<quote>(.*?)<\/quote>/gis,
-        processor: (match: string, content: string) => {
-          blocks.push({
+        blockCreator: (content: string) => {
+          return {
             type: 'quote',
             quote: {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Dividers: <divider/> or <divider></divider>
       {
         regex: /<divider\s*\/?>/gis,
-        processor: (match: string) => {
-          blocks.push({
+        blockCreator: () => {
+          return {
             type: 'divider',
             divider: {},
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // To-do items: <todo checked="true">content</todo>
       {
         regex: /<todo\s*(?:checked="([^"]*)")?\s*>(.*?)<\/todo>/gis,
-        processor: (match: string, checked: string = 'false', content: string) => {
+        blockCreator: (checked: string = 'false', content: string) => {
           const isChecked = checked.toLowerCase() === 'true';
-          blocks.push({
+          return {
             type: 'to_do',
             to_do: {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
               checked: isChecked,
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Headings: <h1>content</h1>, <h2>content</h2>, <h3>content</h3>
       {
         regex: /<h([123])>(.*?)<\/h[123]>/gis,
-        processor: (match: string, level: string, content: string) => {
+        blockCreator: (level: string, content: string) => {
           const headingType = `heading_${level}` as 'heading_1' | 'heading_2' | 'heading_3';
-          blocks.push({
+          return {
             type: headingType,
             [headingType]: {
               rich_text: [createRichText(content.trim())],
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Paragraphs: <p>content</p>
       {
         regex: /<p>(.*?)<\/p>/gis,
-        processor: (match: string, content: string) => {
-          blocks.push({
+        blockCreator: (content: string) => {
+          return {
             type: 'paragraph',
             paragraph: {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Process complete bulleted lists first: <ul><li>item</li></ul>
       {
         regex: /<ul\s*[^>]*>(.*?)<\/ul>/gis,
-        processor: (match: string, listContent: string) => {
-          // Process nested lists by flattening them first
+        blockCreator: (listContent: string) => {
+          // This will be handled specially in hierarchical processing
+          return null;
+        },
+        listProcessor: (listContent: string, blocks: IDataObject[]) => {
           NotionAITool.processNestedList(listContent, 'bulleted_list_item', blocks);
-          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
       // Process complete numbered lists first: <ol><li>item</li></ol>
       {
         regex: /<ol\s*[^>]*>(.*?)<\/ol>/gis,
-        processor: (match: string, listContent: string) => {
-          // Process nested lists by flattening them first
+        blockCreator: (listContent: string) => {
+          // This will be handled specially in hierarchical processing
+          return null;
+        },
+        listProcessor: (listContent: string, blocks: IDataObject[]) => {
           NotionAITool.processNestedList(listContent, 'numbered_list_item', blocks);
-          return `${placeholderPrefix}${blockCounter++}__`;
         }
       },
 
       // Blockquotes: <blockquote>content</blockquote>
       {
         regex: /<blockquote>(.*?)<\/blockquote>/gis,
-        processor: (match: string, content: string) => {
-          blocks.push({
+        blockCreator: (content: string) => {
+          return {
             type: 'quote',
             quote: {
               rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Preformatted text: <pre>content</pre>
       {
         regex: /<pre>(.*?)<\/pre>/gis,
-        processor: (match: string, content: string) => {
-          blocks.push({
+        blockCreator: (content: string) => {
+          return {
             type: 'code',
             code: {
               rich_text: [createRichText(content.trim())],
               language: 'plain_text',
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Standalone list items (only if not already processed in lists): <li>content</li>
       {
         regex: /<li\s*[^>]*>(.*?)<\/li>/gis,
-        processor: (match: string, content: string) => {
+        blockCreator: (content: string) => {
           if (content.trim()) {
-            blocks.push({
+            return {
               type: 'bulleted_list_item',
               bulleted_list_item: {
                 rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
               },
-            });
+            };
           }
-          return `${placeholderPrefix}${blockCounter++}__`;
+          return null;
         }
       },
 
       // Strong/Bold: <strong>content</strong> or <b>content</b> (only as standalone)
       {
         regex: /(?:^|>|\s)<(strong|b)>(.*?)<\/(strong|b)>(?=<|$|\s)/gis,
-        processor: (match: string, tag: string, content: string) => {
-          blocks.push({
+        blockCreator: (tag: string, content: string) => {
+          return {
             type: 'paragraph',
             paragraph: {
               rich_text: NotionAITool.parseBasicMarkdown(`**${content.trim()}**`),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Emphasis/Italic: <em>content</em> or <i>content</i> (only as standalone)
       {
         regex: /(?:^|>|\s)<(em|i)>(.*?)<\/(em|i)>(?=<|$|\s)/gis,
-        processor: (match: string, tag: string, content: string) => {
-          blocks.push({
+        blockCreator: (tag: string, content: string) => {
+          return {
             type: 'paragraph',
             paragraph: {
               rich_text: NotionAITool.parseBasicMarkdown(`*${content.trim()}*`),
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
 
       // Line breaks: <br/> or <br>
       {
         regex: /<br\s*\/?>/gis,
-        processor: (match: string) => {
-          blocks.push({
+        blockCreator: () => {
+          return {
             type: 'paragraph',
             paragraph: {
               rich_text: [createRichText('')],
             },
-          });
-          return `${placeholderPrefix}${blockCounter++}__`;
+          };
         }
       },
     ];
 
-    // Find all XML tags with their positions to maintain order
-    const allMatches: TagMatch[] = [];
-
-    // Collect all matches from all processors
-    tagProcessors.forEach(({ regex, processor }) => {
-      const globalRegex = new RegExp(regex.source, 'gis');
-      let match;
-      while ((match = globalRegex.exec(processedContent)) !== null) {
-        // Use Unicode-safe position calculation for non-ASCII content
-        const hasUnicode = /[^\x00-\x7F]/.test(processedContent);
-        const start = hasUnicode ?
-          NotionAITool.getUtf8BytePosition(processedContent, match.index) :
-          match.index;
-        const end = hasUnicode ?
-          NotionAITool.getUtf8BytePosition(processedContent, match.index + match[0].length) :
-          match.index + match[0].length;
-          
-        allMatches.push({
-          start,
-          end,
-          match: match[0],
-          processor,
-          groups: match.slice(1) // Capture groups
-        });
+    try {
+      // Step 1: Build hierarchical XML tree
+      const xmlTree = NotionAITool.buildXMLTree(processedContent, tagProcessors);
+      
+      if (DEBUG_ORDERING && xmlTree.length > 0) {
+        console.log('XML Tree Structure:', xmlTree.map(node => ({
+          tag: node.tagName,
+          depth: node.depth,
+          children: node.children.length,
+          start: node.start
+        })));
       }
-    });
 
-    // Resolve overlapping tags
-    const resolvedMatches = NotionAITool.resolveOverlaps(allMatches);
-    
-    // Sort matches by position to maintain order
-    resolvedMatches.sort((a, b) => a.start - b.start);
-
-    // Add validation and preprocessing
-    const validMatches = resolvedMatches.filter(({ match }) => {
-      const tagName = match.match(/<(\w+)/)?.[1];
-      return tagName ? NotionAITool.validateXmlTag(match, tagName) : true;
-    });
-
-    // Debug logging
-    if (DEBUG_ORDERING && validMatches.length > 0) {
-      console.log('XML Tags Processing Order:', validMatches.map(m => ({
-        type: m.match.match(/<(\w+)/)?.[1],
-        start: m.start,
-        content: m.match.substring(0, 50) + (m.match.length > 50 ? '...' : '')
-      })));
-    }
-
-    // Process matches with enhanced replacement system
-    const processedMatches = validMatches.map(({ start, end, match, processor, groups }) => {
-      try {
-        const replacement = processor(match, groups[0] || '', groups[1] || '', groups[2] || '');
-        return { start, end, replacement, match };
-      } catch (error) {
-        console.warn(`Error processing XML tag: ${match.substring(0, 50)}...`, error);
-        return { start, end, replacement: match, match }; // Return original if processing fails
+      // Step 2: Process tree depth-first (children before parents)
+      const replacements = NotionAITool.processXMLTreeDepthFirst(xmlTree, blocks, placeholderPrefix);
+      
+      // Step 3: Apply hierarchical replacements to content
+      processedContent = NotionAITool.applyHierarchicalReplacements(processedContent, xmlTree, replacements);
+      
+      // Step 4: Clean up any remaining HTML tags
+      processedContent = NotionAITool.cleanupRemainingHtml(processedContent, placeholderPrefix);
+      
+      if (DEBUG_ORDERING) {
+        console.log(`Processed ${xmlTree.length} root XML nodes hierarchically, created ${blocks.length} blocks`);
       }
-    });
-
-    // Use optimized replacement for better performance
-    if (processedMatches.length > 0) {
-      processedContent = NotionAITool.optimizedReplace(processedContent, processedMatches);
-    }
-
-    // Clean up any remaining HTML tags that weren't processed
-    processedContent = NotionAITool.cleanupRemainingHtml(processedContent, placeholderPrefix);
-    
-    if (DEBUG_ORDERING) {
-      console.log(`Processed ${validMatches.length} XML tags, created ${blockCounter} blocks`);
+      
+    } catch (error) {
+      console.warn('Error in hierarchical XML processing, falling back to linear processing:', error);
+      
+      // Fallback to linear processing if hierarchical fails
+      const allMatches: TagMatch[] = [];
+      tagProcessors.forEach(({ regex, blockCreator }) => {
+        const globalRegex = new RegExp(regex.source, 'gis');
+        let match;
+        while ((match = globalRegex.exec(processedContent)) !== null) {
+          allMatches.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            match: match[0],
+            processor: (match: string, group1?: string, group2?: string, group3?: string) => {
+              try {
+                const block = (blockCreator as any)(group1 || '', group2 || '', group3 || '');
+                if (block) {
+                  blocks.push(block);
+                }
+                return `${placeholderPrefix}${Math.random()}__`;
+              } catch (error) {
+                console.warn('Error in fallback processor:', error);
+                return match;
+              }
+            },
+            groups: match.slice(1)
+          });
+        }
+      });
+      
+      const resolvedMatches = NotionAITool.resolveOverlaps(allMatches);
+      resolvedMatches.sort((a, b) => a.start - b.start);
+      
+      const processedMatches = resolvedMatches.map(({ start, end, match, processor, groups }) => {
+        try {
+          const replacement = processor(match, groups[0] || '', groups[1] || '', groups[2] || '');
+          return { start, end, replacement, match };
+        } catch (error) {
+          return { start, end, replacement: match, match };
+        }
+      });
+      
+      if (processedMatches.length > 0) {
+        processedContent = NotionAITool.optimizedReplace(processedContent, processedMatches);
+      }
+      
+      processedContent = NotionAITool.cleanupRemainingHtml(processedContent, placeholderPrefix);
     }
 
     return processedContent;
