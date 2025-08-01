@@ -900,53 +900,43 @@ export class NotionAITool implements INodeType {
         }
       },
 
-      // Bulleted lists: <ul><li>item</li></ul>
+      // Process complete bulleted lists first: <ul><li>item</li></ul>
       {
-        regex: /<ul>(.*?)<\/ul>/gis,
+        regex: /<ul\s*[^>]*>(.*?)<\/ul>/gis,
         processor: (match: string, listContent: string) => {
-          // Extract individual list items
-          const items = listContent.match(/<li>(.*?)<\/li>/gis) || [];
+          // Extract individual list items and process them
+          const items = listContent.match(/<li\s*[^>]*>(.*?)<\/li>/gis) || [];
           items.forEach(item => {
-            const itemContent = item.replace(/<\/?li>/gi, '').trim();
-            blocks.push({
-              type: 'bulleted_list_item',
-              bulleted_list_item: {
-                rich_text: NotionAITool.parseBasicMarkdown(itemContent),
-              },
-            });
+            const itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
+            if (itemContent) {
+              blocks.push({
+                type: 'bulleted_list_item',
+                bulleted_list_item: {
+                  rich_text: NotionAITool.parseBasicMarkdown(itemContent),
+                },
+              });
+            }
           });
           return `__XML_BLOCK_${blockCounter++}__`;
         }
       },
 
-      // Numbered lists: <ol><li>item</li></ol>
+      // Process complete numbered lists first: <ol><li>item</li></ol>
       {
-        regex: /<ol>(.*?)<\/ol>/gis,
+        regex: /<ol\s*[^>]*>(.*?)<\/ol>/gis,
         processor: (match: string, listContent: string) => {
-          // Extract individual list items
-          const items = listContent.match(/<li>(.*?)<\/li>/gis) || [];
+          // Extract individual list items and process them
+          const items = listContent.match(/<li\s*[^>]*>(.*?)<\/li>/gis) || [];
           items.forEach(item => {
-            const itemContent = item.replace(/<\/?li>/gi, '').trim();
-            blocks.push({
-              type: 'numbered_list_item',
-              numbered_list_item: {
-                rich_text: NotionAITool.parseBasicMarkdown(itemContent),
-              },
-            });
-          });
-          return `__XML_BLOCK_${blockCounter++}__`;
-        }
-      },
-
-      // Standalone list items: <li>content</li>
-      {
-        regex: /<li>(.*?)<\/li>/gis,
-        processor: (match: string, content: string) => {
-          blocks.push({
-            type: 'bulleted_list_item',
-            bulleted_list_item: {
-              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
-            },
+            const itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
+            if (itemContent) {
+              blocks.push({
+                type: 'numbered_list_item',
+                numbered_list_item: {
+                  rich_text: NotionAITool.parseBasicMarkdown(itemContent),
+                },
+              });
+            }
           });
           return `__XML_BLOCK_${blockCounter++}__`;
         }
@@ -981,9 +971,25 @@ export class NotionAITool implements INodeType {
         }
       },
 
-      // Strong/Bold: <strong>content</strong> or <b>content</b>
+      // Standalone list items (only if not already processed in lists): <li>content</li>
       {
-        regex: /<(strong|b)>(.*?)<\/(strong|b)>/gis,
+        regex: /<li\s*[^>]*>(.*?)<\/li>/gis,
+        processor: (match: string, content: string) => {
+          if (content.trim()) {
+            blocks.push({
+              type: 'bulleted_list_item',
+              bulleted_list_item: {
+                rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+              },
+            });
+          }
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Strong/Bold: <strong>content</strong> or <b>content</b> (only as standalone)
+      {
+        regex: /(?:^|>|\s)<(strong|b)>(.*?)<\/(strong|b)>(?=<|$|\s)/gis,
         processor: (match: string, tag: string, content: string) => {
           blocks.push({
             type: 'paragraph',
@@ -995,9 +1001,9 @@ export class NotionAITool implements INodeType {
         }
       },
 
-      // Emphasis/Italic: <em>content</em> or <i>content</i>
+      // Emphasis/Italic: <em>content</em> or <i>content</i> (only as standalone)
       {
-        regex: /<(em|i)>(.*?)<\/(em|i)>/gis,
+        regex: /(?:^|>|\s)<(em|i)>(.*?)<\/(em|i)>(?=<|$|\s)/gis,
         processor: (match: string, tag: string, content: string) => {
           blocks.push({
             type: 'paragraph',
@@ -1031,7 +1037,41 @@ export class NotionAITool implements INodeType {
       });
     });
 
+    // Clean up any remaining HTML tags that weren't processed
+    processedContent = NotionAITool.cleanupRemainingHtml(processedContent);
+
     return processedContent;
+  }
+
+  // Cleanup function to remove remaining HTML tags
+  static cleanupRemainingHtml(content: string): string {
+    let cleaned = content;
+    
+    // Remove common HTML tags that might be left behind
+    const htmlTagsToRemove = [
+      /<\/?ul\s*[^>]*>/gi,
+      /<\/?ol\s*[^>]*>/gi,
+      /<\/?li\s*[^>]*>/gi,
+      /<\/?strong\s*[^>]*>/gi,
+      /<\/?b\s*[^>]*>/gi,
+      /<\/?em\s*[^>]*>/gi,
+      /<\/?i\s*[^>]*>/gi,
+      /<\/?div\s*[^>]*>/gi,
+      /<\/?span\s*[^>]*>/gi,
+      /<br\s*\/?>/gi,
+    ];
+
+    htmlTagsToRemove.forEach(regex => {
+      cleaned = cleaned.replace(regex, '');
+    });
+
+    // Remove empty lines created by tag removal
+    cleaned = cleaned.replace(/^\s*[\r\n]/gm, '');
+    
+    // Remove multiple consecutive line breaks
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    
+    return cleaned.trim();
   }
 
   // Helper function to get callout emoji based on type

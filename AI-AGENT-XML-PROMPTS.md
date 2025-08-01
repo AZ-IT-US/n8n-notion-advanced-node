@@ -4,18 +4,38 @@
 
 The Notion AI Tool now supports advanced XML-like tag formatting for precise, unambiguous content parsing. This eliminates formatting conflicts and ensures consistent results across all block types.
 
-## Why XML-Style Tags?
+## Recommended Approach: HTML + XML Hybrid
 
-### Problems with Traditional Markdown
-- **Ambiguity**: `> [!info]` vs `>` quotes can conflict
-- **Context Sensitivity**: Parsing depends on surrounding content
-- **Edge Cases**: Complex patterns fail with mixed content
+### 🎯 Best Practice for AI Agents
+**Use standard HTML tags for common content, specialized XML tags for advanced features.**
 
-### Benefits of XML Tags
-- **Explicit Intent**: `<callout type="info">` is unambiguous
-- **Reliable Parsing**: No conflicts between similar patterns
-- **Enhanced Features**: Better attribute support (types, languages, etc.)
-- **Future-Proof**: Extensible for new block types
+### HTML Tags (Use These First)
+- `<p>` for ALL paragraphs (CRITICAL - never use plain text)
+- `<h1>`, `<h2>`, `<h3>` for headings
+- `<ul><li>` for bullet lists, `<ol><li>` for numbered lists
+- `<strong>`, `<b>` for bold text
+- `<em>`, `<i>` for italic text
+- `<blockquote>` for quotes
+- `<br/>` for line breaks
+
+### XML Tags (For Advanced Features)
+- `<callout type="info|warning|tip|success|error|note|danger|question">` for special notices
+- `<code language="javascript|python|sql">` for syntax-highlighted code
+- `<image src="url" alt="description">` for images
+- `<todo checked="true|false">` for task lists
+- `<embed>`, `<bookmark>`, `<toggle>`, `<divider/>` for special content
+
+### Why This Hybrid Approach Works
+- **Familiar**: AI agents naturally understand HTML tags
+- **Reliable**: No parsing conflicts or ambiguity
+- **Flexible**: Mix HTML and XML as needed
+- **Future-Proof**: Extensible system for new features
+
+### Critical Rule
+**Always wrap text content in `<p>` tags. Plain text without HTML tags can cause parsing issues.**
+
+✅ Correct: `<p>This is a paragraph with <strong>bold text</strong>.</p>`
+❌ Incorrect: `This is plain text without tags.`
 
 ## Complete XML Tag Reference
 
@@ -323,42 +343,66 @@ Format everything using proper XML tags with rich text formatting for emphasis.
 
 ### Template 4: Technical Report
 ```
-Generate a structured technical report using XML formatting:
+Generate a structured technical report using HTML and XML formatting:
 
 REPORT STRUCTURE:
-<h1>Report Title</h1>
-<callout type="info">Executive summary and key findings</callout>
+<h1>Technical Report Title</h1>
+<p>Comprehensive technical analysis report covering <strong>key findings</strong> and <em>strategic recommendations</em> based on data analysis.</p>
+<callout type="info">Executive Summary: Brief overview of major findings and business impact</callout>
 
-<h2>Methodology</h2>
-Description of research methods and approach.
+<h2>Research Methodology</h2>
+<p>This report employs the following research methods and analytical approaches:</p>
+<ul>
+<li><strong>Data Collection:</strong> Primary and secondary data sources</li>
+<li><strong>Analysis Framework:</strong> Statistical and quantitative methods</li>
+<li><strong>Validation Process:</strong> Peer review and verification procedures</li>
+</ul>
 
-<h2>Data Analysis</h2>
+<h2>Data Analysis and Results</h2>
+<p>The analysis reveals several key insights from the collected data.</p>
+
 <h3>Statistical Results</h3>
-<equation>Statistical formulas and calculations</equation>
+<p>Mathematical analysis shows the following relationships:</p>
+<equation>\bar{x} = \frac{\sum_{i=1}^{n} x_i}{n}</equation>
 
 <h3>Performance Metrics</h3>
-<code language="sql">Data queries and analysis code</code>
+<p>Database analysis was performed using the following queries:</p>
+<code language="sql">
+SELECT category, AVG(performance_score) as avg_score
+FROM metrics_table
+WHERE date_range BETWEEN '2024-01-01' AND '2024-12-31'
+GROUP BY category;
+</code>
 
-<h2>Findings</h2>
-<callout type="success">Positive outcomes and achievements</callout>
-<callout type="warning">Areas of concern or improvement</callout>
+<h2>Key Findings</h2>
+<p>The analysis has identified both positive outcomes and areas requiring attention:</p>
+<callout type="success">Performance metrics exceeded baseline expectations by 25%</callout>
+<callout type="warning">Resource utilization shows inefficiencies requiring immediate attention</callout>
 
-<h2>Recommendations</h2>
-<todo checked="false">**High priority** recommendation</todo>
-<todo checked="false">*Medium priority* recommendation</todo>
+<h2>Strategic Recommendations</h2>
+<p>Based on the findings, we recommend the following action items:</p>
+<todo checked="false"><strong>High Priority:</strong> Implement resource optimization protocols</todo>
+<todo checked="false"><strong>Medium Priority:</strong> Establish ongoing monitoring systems</todo>
 
 <h2>Conclusion</h2>
-<quote>Key takeaway or impactful statement</quote>
+<p>The comprehensive analysis provides clear direction for future improvements.</p>
+<blockquote>Data-driven decisions are the foundation of sustainable business growth.</blockquote>
 
-<h2>Appendices</h2>
-<toggle>Additional Data and References</toggle>
+<h2>Supporting Documentation</h2>
+<toggle>Detailed Statistical Analysis and Raw Data</toggle>
 
 <divider/>
 
-<h2>Resources</h2>
-<bookmark>https://research-source.com</bookmark>
+<h2>External Resources</h2>
+<p>Reference materials and supporting documentation:</p>
+<bookmark>https://research-methodology-guide.com</bookmark>
 
-Use XML formatting with appropriate callout types and rich text emphasis.
+FORMATTING REQUIREMENTS:
+- Use <p> tags for ALL explanatory text and descriptions
+- Use <h1>, <h2>, <h3> for clear document hierarchy
+- Use <callout type="success|warning|info"> for key findings
+- Use <todo checked="false"> for actionable recommendations
+- Use <code language="..."> for technical examples
 ```
 
 ## Content Strategy Guidelines
