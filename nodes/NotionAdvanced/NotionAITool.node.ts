@@ -1158,10 +1158,12 @@ export class NotionAITool implements INodeType {
       {
         regex: /<p>(.*?)<\/p>/gis,
         blockCreator: (content: string) => {
+          // First convert HTML tags to markdown, then parse to rich text
+          const markdownContent = NotionAITool.convertInlineHtmlToMarkdown(content.trim());
           return {
             type: 'paragraph',
             paragraph: {
-              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+              rich_text: NotionAITool.parseBasicMarkdown(markdownContent),
             },
           };
         }
@@ -1223,10 +1225,12 @@ export class NotionAITool implements INodeType {
         regex: /<li\s*[^>]*>(.*?)<\/li>/gis,
         blockCreator: (content: string) => {
           if (content.trim()) {
+            // Convert HTML to markdown first, then parse to rich text
+            const markdownContent = NotionAITool.convertInlineHtmlToMarkdown(content.trim());
             return {
               type: 'bulleted_list_item',
               bulleted_list_item: {
-                rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+                rich_text: NotionAITool.parseBasicMarkdown(markdownContent),
               },
             };
           }
@@ -1358,13 +1362,30 @@ export class NotionAITool implements INodeType {
     
     // Remove XML_BLOCK placeholder artifacts (support both old and new format)
     if (placeholderPrefix) {
-      const placeholderRegex = new RegExp(`${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+__`, 'g');
-      cleaned = cleaned.replace(placeholderRegex, '');
-    } else {
-      // Fallback for backward compatibility
-      cleaned = cleaned.replace(/__XML_BLOCK_\d+__/g, '');
-      cleaned = cleaned.replace(/__XML_[a-f0-9]{8}_\d+__/g, '');
+      // More aggressive placeholder cleanup with multiple patterns
+      const placeholderPatterns = [
+        new RegExp(`${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+__`, 'g'),
+        new RegExp(`_${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+_`, 'g'),
+        new RegExp(`${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+`, 'g')
+      ];
+      
+      placeholderPatterns.forEach(pattern => {
+        cleaned = cleaned.replace(pattern, '');
+      });
     }
+    
+    // Comprehensive fallback cleanup for all possible placeholder formats
+    const fallbackPatterns = [
+      /__XML_BLOCK_\d+__/g,
+      /__XML_[a-f0-9]{8}_\d+__/g,
+      /_XML_[a-f0-9]{8}_\d+_/g,
+      /__XML_[a-f0-9-]+_\d+__/g,
+      /_XML_[a-f0-9-]+_\d+_/g
+    ];
+    
+    fallbackPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
     
     // Remove common HTML tags that might be left behind
     const htmlTagsToRemove = [
@@ -1397,9 +1418,22 @@ export class NotionAITool implements INodeType {
     // Remove multiple consecutive line breaks
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
     
-    // Remove lines that contain only XML_BLOCK artifacts
-    cleaned = cleaned.replace(/^.*__XML_BLOCK_\d+__.*$/gm, '');
-    cleaned = cleaned.replace(/^.*__XML_[a-f0-9]{8}_\d+__.*$/gm, '');
+    // Remove lines that contain only XML_BLOCK artifacts (more patterns)
+    const artifactPatterns = [
+      /^.*__XML_BLOCK_\d+__.*$/gm,
+      /^.*__XML_[a-f0-9]{8}_\d+__.*$/gm,
+      /^.*_XML_[a-f0-9]{8}_\d+_.*$/gm,
+      /^.*__XML_[a-f0-9-]+_\d+__.*$/gm,
+      /^.*_XML_[a-f0-9-]+_\d+_.*$/gm
+    ];
+    
+    artifactPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+    
+    // Final cleanup of any remaining isolated placeholder patterns
+    cleaned = cleaned.replace(/\b_+XML_[a-f0-9-]+_\d+_*\b/g, '');
+    cleaned = cleaned.replace(/\b_*XML_[a-f0-9-]+_\d+_+\b/g, '');
     
     return cleaned.trim();
   }
