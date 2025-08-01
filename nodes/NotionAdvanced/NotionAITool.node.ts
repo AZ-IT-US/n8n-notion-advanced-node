@@ -904,23 +904,8 @@ export class NotionAITool implements INodeType {
       {
         regex: /<ul\s*[^>]*>(.*?)<\/ul>/gis,
         processor: (match: string, listContent: string) => {
-          // Extract individual list items and process them
-          const items = listContent.match(/<li\s*[^>]*>(.*?)<\/li>/gis) || [];
-          items.forEach(item => {
-            let itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
-            
-            // Clean up nested HTML tags and convert to markdown-compatible format
-            itemContent = NotionAITool.processNestedHtmlInListItem(itemContent);
-            
-            if (itemContent) {
-              blocks.push({
-                type: 'bulleted_list_item',
-                bulleted_list_item: {
-                  rich_text: NotionAITool.parseBasicMarkdown(itemContent),
-                },
-              });
-            }
-          });
+          // Process nested lists by flattening them first
+          NotionAITool.processNestedList(listContent, 'bulleted_list_item', blocks);
           return `__XML_BLOCK_${blockCounter++}__`;
         }
       },
@@ -929,23 +914,8 @@ export class NotionAITool implements INodeType {
       {
         regex: /<ol\s*[^>]*>(.*?)<\/ol>/gis,
         processor: (match: string, listContent: string) => {
-          // Extract individual list items and process them
-          const items = listContent.match(/<li\s*[^>]*>(.*?)<\/li>/gis) || [];
-          items.forEach(item => {
-            let itemContent = item.replace(/<\/?li[^>]*>/gi, '').trim();
-            
-            // Clean up nested HTML tags and convert to markdown-compatible format
-            itemContent = NotionAITool.processNestedHtmlInListItem(itemContent);
-            
-            if (itemContent) {
-              blocks.push({
-                type: 'numbered_list_item',
-                numbered_list_item: {
-                  rich_text: NotionAITool.parseBasicMarkdown(itemContent),
-                },
-              });
-            }
-          });
+          // Process nested lists by flattening them first
+          NotionAITool.processNestedList(listContent, 'numbered_list_item', blocks);
           return `__XML_BLOCK_${blockCounter++}__`;
         }
       },
@@ -1137,6 +1107,99 @@ export class NotionAITool implements INodeType {
     processed = processed.replace(/\s+/g, ' ').trim();
 
     return processed;
+  }
+
+  // Helper function to process nested lists and flatten them for Notion
+  static processNestedList(listContent: string, listType: 'bulleted_list_item' | 'numbered_list_item', blocks: IDataObject[]): void {
+    // Extract top-level list items using a more careful approach
+    const items: string[] = [];
+    let currentPos = 0;
+    
+    while (currentPos < listContent.length) {
+      const liStart = listContent.indexOf('<li', currentPos);
+      if (liStart === -1) break;
+      
+      const liEndTag = listContent.indexOf('>', liStart);
+      if (liEndTag === -1) break;
+      
+      // Find the matching closing </li> tag, accounting for nested content
+      let depth = 1;
+      let searchPos = liEndTag + 1;
+      let liEnd = -1;
+      
+      while (searchPos < listContent.length && depth > 0) {
+        const nextLiStart = listContent.indexOf('<li', searchPos);
+        const nextLiEnd = listContent.indexOf('</li>', searchPos);
+        
+        if (nextLiEnd === -1) break;
+        
+        if (nextLiStart !== -1 && nextLiStart < nextLiEnd) {
+          depth++;
+          searchPos = nextLiStart + 3;
+        } else {
+          depth--;
+          if (depth === 0) {
+            liEnd = nextLiEnd;
+          }
+          searchPos = nextLiEnd + 5;
+        }
+      }
+      
+      if (liEnd === -1) break;
+      
+      // Extract the full <li>...</li> content
+      const fullItem = listContent.substring(liStart, liEnd + 5);
+      items.push(fullItem);
+      currentPos = liEnd + 5;
+    }
+    
+    // Process each top-level item
+    items.forEach(item => {
+      // Remove the outer <li> tags
+      let itemContent = item.replace(/^<li[^>]*>/, '').replace(/<\/li>$/, '').trim();
+      
+      // Check if this item contains nested lists
+      const hasNestedList = /<[uo]l\s*[^>]*>/i.test(itemContent);
+      
+      if (hasNestedList) {
+        // Extract the text before the nested list
+        const beforeNestedList = itemContent.replace(/<[uo]l\s*[^>]*>.*$/is, '').trim();
+        
+        if (beforeNestedList) {
+          // Clean up and add the main item
+          const cleanContent = NotionAITool.processNestedHtmlInListItem(beforeNestedList);
+          if (cleanContent) {
+            blocks.push({
+              type: listType,
+              [listType]: {
+                rich_text: NotionAITool.parseBasicMarkdown(cleanContent),
+              },
+            });
+          }
+        }
+        
+        // Extract and process nested lists
+        const nestedListMatch = itemContent.match(/<([uo]l)\s*[^>]*>(.*?)<\/\1>/is);
+        if (nestedListMatch) {
+          const [, nestedListTag, nestedContent] = nestedListMatch;
+          const nestedListType = nestedListTag === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
+          
+          // Recursively process nested list
+          NotionAITool.processNestedList(nestedContent, nestedListType, blocks);
+        }
+      } else {
+        // Simple item without nested lists
+        const cleanContent = NotionAITool.processNestedHtmlInListItem(itemContent);
+        if (cleanContent) {
+          blocks.push({
+            type: listType,
+            [listType]: {
+              rich_text: NotionAITool.parseBasicMarkdown(cleanContent),
+            },
+          });
+        }
+      }
+    });
   }
 
   // Helper function to get callout emoji based on type
