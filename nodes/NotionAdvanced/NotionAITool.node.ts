@@ -495,7 +495,10 @@ export class NotionAITool implements INodeType {
 
   static parseContentToBlocks(content: string): IDataObject[] {
     const blocks: IDataObject[] = [];
-    const lines = content.split('\n');
+    
+    // Handle both actual newlines and escaped \n characters
+    const normalizedContent = content.replace(/\\n/g, '\n');
+    const lines = normalizedContent.split('\n');
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
