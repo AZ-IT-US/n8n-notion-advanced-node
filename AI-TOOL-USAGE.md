@@ -94,10 +94,16 @@ The tool automatically converts natural language into proper Notion blocks:
 ```
 # Heading → Notion Heading 1 block
 ## Subheading → Notion Heading 2 block
+### Subsection → Notion Heading 3 block
 - Bullet point → Notion Bulleted List Item
 1. Numbered item → Notion Numbered List Item
+- [ ] Todo item → Notion To-Do Item (unchecked)
+- [x] Done item → Notion To-Do Item (checked)
 > Quote text → Notion Quote block
+```javascript code``` → Notion Code block
 ```
+
+> **📋 For Detailed Formatting Guide**: See [AI-AGENT-PROMPTS.md](./AI-AGENT-PROMPTS.md) for comprehensive examples and AI agent prompt templates.
 
 ### Intelligent Property Handling
 AI agents can specify properties in natural language:

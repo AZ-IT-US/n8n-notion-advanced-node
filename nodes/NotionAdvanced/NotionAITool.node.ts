@@ -526,6 +526,86 @@ export class NotionAITool implements INodeType {
             rich_text: [createRichText(trimmedLine.substring(4).trim())],
           },
         });
+      } else if (trimmedLine.match(/^---+$/) || trimmedLine.match(/^\*\*\*+$/)) {
+        // Divider/horizontal rule: --- or ***
+        blocks.push({
+          type: 'divider',
+          divider: {},
+        });
+      } else if (trimmedLine.match(/^> \[!(info|warning|danger|note|tip)\]/i)) {
+        // Callout blocks: > [!info] content, > [!warning] content, etc.
+        const match = trimmedLine.match(/^> \[!(\w+)\]\s*(.*)/i);
+        if (match) {
+          const [, calloutType, text] = match;
+          const emoji = NotionAITool.getCalloutEmoji(calloutType.toLowerCase());
+          blocks.push({
+            type: 'callout',
+            callout: {
+              rich_text: [createRichText(text)],
+              icon: { type: 'emoji', emoji },
+              color: NotionAITool.getCalloutColor(calloutType.toLowerCase()),
+            },
+          });
+        }
+      } else if (trimmedLine.match(/^!\[.*?\]\(.*?\)$/)) {
+        // Image: ![alt text](url)
+        const match = trimmedLine.match(/^!\[(.*?)\]\((.*?)\)$/);
+        if (match) {
+          const [, altText, url] = match;
+          blocks.push({
+            type: 'image',
+            image: {
+              type: 'external',
+              external: { url },
+              caption: altText ? [createRichText(altText)] : [],
+            },
+          });
+        }
+      } else if (trimmedLine.match(/^\$\$.*\$\$$/)) {
+        // Equation: $$equation$$
+        const equation = trimmedLine.replace(/^\$\$/, '').replace(/\$\$$/, '').trim();
+        blocks.push({
+          type: 'equation',
+          equation: {
+            expression: equation,
+          },
+        });
+      } else if (trimmedLine.match(/^https?:\/\/.*/) && !trimmedLine.includes(' ')) {
+        // Bookmark: standalone URL
+        blocks.push({
+          type: 'bookmark',
+          bookmark: {
+            url: trimmedLine,
+          },
+        });
+      } else if (trimmedLine.match(/^▶\s+/) || trimmedLine.match(/^<details>/)) {
+        // Toggle block: ▶ title or <details>title</details>
+        let title = '';
+        if (trimmedLine.startsWith('▶ ')) {
+          title = trimmedLine.substring(2).trim();
+        } else if (trimmedLine.match(/^<details>(.*?)<\/details>$/)) {
+          const match = trimmedLine.match(/^<details>(.*?)<\/details>$/);
+          title = match ? match[1] : '';
+        }
+        blocks.push({
+          type: 'toggle',
+          toggle: {
+            rich_text: [createRichText(title)],
+            children: [], // Empty children for now
+          },
+        });
+      } else if (trimmedLine.match(/^\|.*\|$/)) {
+        // Table row: | cell1 | cell2 | cell3 |
+        // For now, convert tables to simple paragraph format
+        // Full table support would require more complex parsing
+        const cells = trimmedLine.split('|').map(cell => cell.trim()).filter(cell => cell);
+        const tableText = cells.join(' | ');
+        blocks.push({
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [createRichText(`Table: ${tableText}`)],
+          },
+        });
       } else if (trimmedLine.match(/^- \[[ x]\] /)) {
         // To-do list items: - [ ] or - [x]
         const isChecked = trimmedLine.includes('[x]');
@@ -590,6 +670,36 @@ export class NotionAITool implements INodeType {
     }
 
     return blocks;
+  }
+
+  // Helper function to get callout emoji based on type
+  static getCalloutEmoji(type: string): string {
+    const emojiMap: { [key: string]: string } = {
+      'info': 'ℹ️',
+      'warning': '⚠️',
+      'danger': '🚨',
+      'error': '❌',
+      'note': '📝',
+      'tip': '💡',
+      'success': '✅',
+      'question': '❓',
+    };
+    return emojiMap[type] || 'ℹ️';
+  }
+
+  // Helper function to get callout color based on type
+  static getCalloutColor(type: string): string {
+    const colorMap: { [key: string]: string } = {
+      'info': 'blue',
+      'warning': 'yellow',
+      'danger': 'red',
+      'error': 'red',
+      'note': 'gray',
+      'tip': 'green',
+      'success': 'green',
+      'question': 'purple',
+    };
+    return colorMap[type] || 'gray';
   }
 
   // Helper function to parse basic markdown formatting in text
