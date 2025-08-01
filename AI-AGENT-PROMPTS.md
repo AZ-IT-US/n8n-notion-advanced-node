@@ -1,248 +1,188 @@
-# AI Agent Prompts for Notion Advanced Tool
+# Complete AI Agent Prompt for Notion Advanced Tool
 
-## Using the "Add Content to Page" Function
+## 🎯 **Universal Prompt for All Situations**
 
-When using the Notion AI Tool to add content to existing pages, follow these formatting guidelines to ensure proper block creation in Notion.
+Use this comprehensive prompt when instructing AI agents to work with the Notion AI Tool. This prompt applies to all operations: creating pages, adding content, or any content formatting task.
 
-### ✅ Supported Content Formatting
+---
 
-The AI Tool parses content using markdown-like syntax. Here are the supported formats:
+## 📋 **Complete Block Types Reference**
 
-#### **Headings**
 ```
-# Main Heading (H1)
-## Section Heading (H2)
-### Subsection Heading (H3)
-```
+When working with Notion content, you can create the following block types using this EXACT syntax:
 
-#### **To-Do Lists**
-```
-- [ ] Incomplete task
-- [x] Completed task
-- [ ] Another task to do
-```
+**1. HEADINGS (3 levels):**
+# Main Heading (creates heading_1 block)
+## Section Heading (creates heading_2 block)  
+### Subsection Heading (creates heading_3 block)
 
-#### **Bullet Lists**
-```
-- First bullet point
-- Second bullet point
-- Third bullet point
-```
+**2. TEXT FORMATTING in paragraphs:**
+**Bold Text** (bold annotation)
+*Italic Text* (italic annotation)
+***Bold Italic Text*** (both annotations)
+~~Strikethrough Text~~ (strikethrough annotation)
+`Inline Code` (code annotation)
+[Link Text](https://example.com) (clickable link)
 
-#### **Numbered Lists**
-```
-1. First numbered item
-2. Second numbered item
-3. Third numbered item
-```
+**3. LISTS:**
+- [ ] Incomplete task (creates to_do block, unchecked)
+- [x] Completed task (creates to_do block, checked)
+- Bullet point (creates bulleted_list_item block)
+* Alternative bullet syntax (creates bulleted_list_item block)
+1. First numbered item (creates numbered_list_item block)
+2. Second numbered item (creates numbered_list_item block)
 
-#### **Quotes**
-```
-> This is a quote block
+**4. QUOTES:**
+> This is a quote block (creates quote block)
 > Multi-line quotes work too
-```
 
-#### **Code Blocks**
-```
+**5. CALLOUTS (6 types with different colors/icons):**
+> [!info] Information callout (blue, ℹ️ icon)
+> [!warning] Warning callout (yellow, ⚠️ icon)
+> [!danger] Danger callout (red, 🚨 icon)
+> [!note] Note callout (gray, 📝 icon)
+> [!tip] Tip callout (green, 💡 icon)
+> [!success] Success callout (green, ✅ icon)
+
+**6. CODE BLOCKS:**
 ```javascript
 function example() {
-    return "Code blocks preserve formatting";
+    return "Code block with syntax highlighting";
 }
 ```
-```
 
-#### **Callout Blocks**
-```
-> [!info] Information callout with blue styling
-> [!warning] Warning callout with yellow styling
-> [!danger] Danger callout with red styling
-> [!note] Note callout with gray styling
-> [!tip] Tip callout with green styling
-> [!success] Success callout with green styling
-```
+**7. MATHEMATICAL EQUATIONS:**
+$$E = mc^2$$ (creates equation block)
+$$\sum_{i=1}^{n} x_i$$ (supports LaTeX syntax)
 
-#### **Dividers**
-```
+**8. VISUAL ELEMENTS:**
+![Image description](https://image-url.com/image.jpg) (creates image block)
 ---
-or
-***
-```
+(creates divider block - use 3 or more dashes)
 
-#### **Images**
-```
-![Alt text description](https://example.com/image.jpg)
-```
+**9. INTERACTIVE BLOCKS:**
+▶ Toggle title (creates toggle block - collapsible)
+<details>Alternative toggle syntax</details> (also creates toggle block)
 
-#### **Equations**
-```
-$$E = mc^2$$
-$$\sum_{i=1}^{n} x_i$$
-```
+**10. MEDIA & LINKS:**
+https://youtube.com/watch?v=abc123 (creates embed block for videos)
+https://vimeo.com/123456789 (creates embed block)
+https://twitch.tv/videos/123456 (creates embed block)
+https://loom.com/share/abc123 (creates embed block)
+https://docs.example.com (creates bookmark block for non-video URLs)
 
-#### **Bookmarks**
-```
-https://example.com/article
-```
+**11. TABLES:**
+| Column 1 | Column 2 | Column 3 | (creates table representation)
+| Cell A1  | Cell B1  | Cell C1  | (each row processed)
 
-#### **Toggle Blocks**
-```
-▶ Toggle title with collapsible content
-or
-<details>Toggle title</details>
-```
+**12. PARAGRAPHS:**
+Regular text becomes paragraph blocks with rich text formatting support.
 
-#### **Tables** (Basic Support)
-```
-| Column 1 | Column 2 | Column 3 |
-| Cell A1  | Cell B1  | Cell C1  |
-```
+**CRITICAL FORMATTING RULES:**
+- Each block type must be on its own line
+- Separate different content blocks with blank lines
+- URLs must be standalone (no surrounding text) to become embeds/bookmarks
+- Use EXACT syntax shown above - no variations
+- Callout types: info, warning, danger, note, tip, success only
+- Code blocks need language specified after opening ```
 
-#### **Regular Paragraphs**
-```
-This is a regular paragraph.
+**EXAMPLE WITH ALL BLOCK TYPES:**
+# Project Documentation
 
-This is another paragraph separated by a blank line.
-```
+> [!info] This demonstrates all available Notion block types
 
----
+## Overview
+This is a **bold** paragraph with *italic* text and `inline code`.
 
-## 🤖 **AI Agent Prompt Template**
-
-Use this prompt template when instructing AI agents to add content to Notion pages:
-
-```
-When adding content to the Notion page, format your content using the following syntax:
-
-**For headings:** Use # for main headings, ## for sections, ### for subsections
-**For tasks:** Use - [ ] for incomplete tasks, - [x] for completed tasks
-**For lists:** Use - for bullet points, or 1. 2. 3. for numbered lists
-**For quotes:** Use > at the start of lines for quote blocks
-**For code:** Use triple backticks ``` to wrap code blocks
-**For callouts:** Use > [!type] for special callouts (info, warning, danger, note, tip, success)
-**For dividers:** Use --- or *** for horizontal rules
-**For images:** Use ![alt text](url) for images
-**For equations:** Use $$equation$$ for mathematical expressions
-**For bookmarks:** Use standalone URLs for bookmark blocks
-**For toggles:** Use ▶ title or <details>title</details> for collapsible content
-**For paragraphs:** Separate paragraphs with blank lines
-
-Example formatted content:
-# Project Update
-
-> [!info] This is the weekly project status report
-
-## Completed Tasks
-- [x] Research phase completed
-- [x] Initial design approved
+### Task Progress
+- [x] Research completed
+- [x] Design finalized  
 - [ ] Development in progress
+- [ ] Testing pending
 
-## Key Insights
-> The user feedback was overwhelmingly positive about the new interface design.
+## Key Information
+> Important quote: "Quality is not an act, it is a habit."
 
----
-
-## Technical Implementation
-```javascript
-const projectStatus = {
-    phase: "development",
-    completion: "65%"
-};
+### Technical Details
+```python
+def calculate_progress():
+    completed = 3
+    total = 5
+    return (completed / total) * 100
 ```
 
 ## Mathematical Formula
 $$Progress = \frac{Completed Tasks}{Total Tasks} \times 100$$
 
-## Next Steps
-1. Finalize development
-2. Conduct user testing
-3. Prepare for launch
+---
 
-▶ Additional Resources
-Reference documentation: https://docs.example.com
+## Resources
+Project repository: https://github.com/example/project
+Demo video: https://youtube.com/watch?v=example123
 
-Please format all content this way before adding it to the Notion page.
+▶ Additional Configuration
+Click to expand for advanced settings and configurations.
+
+![Architecture Diagram](https://example.com/diagram.png)
+
+> [!warning] Remember to test all features before deployment
+
+| Feature | Status | Priority |
+| Auth | Complete | High |
+| UI | In Progress | Medium |
+
+Always format content using these exact patterns for proper Notion block creation.
 ```
 
 ---
 
-## 📝 **Example AI Prompt for Content Addition**
+## 🚀 **Implementation Guide**
 
-```
-Add the following content to the Notion page with proper formatting:
+### **For AI Agent System Prompts:**
+Copy the complete block reference above into your AI agent's system prompt. This ensures the agent knows all available formatting options.
 
-# Weekly Report - January 2025
+### **For n8n Workflows:**
+Use this prompt in any workflow where AI agents create Notion content. The comprehensive format list guarantees proper block creation.
 
-> [!info] Weekly project status update for development team
-
-## Summary
-This week we made significant progress on the project roadmap.
-
-## Accomplishments
-- [x] Completed user research interviews
-- [x] Finalized design mockups
-- [x] Set up development environment
-- [ ] Begin core feature development
-
-## Key Findings
-> Users prefer a more minimalist interface with cleaner navigation.
+### **For Dynamic Content:**
+Whether creating meeting notes, project updates, documentation, or reports, this universal format covers all possibilities.
 
 ---
 
-## Technical Notes
-```javascript
-// New authentication flow
-const authenticateUser = (credentials) => {
-    return validateCredentials(credentials);
-};
-```
+## ✅ **Why This Complete Reference Works**
 
-## Performance Metrics
-$$Efficiency = \frac{Tasks Completed}{Total Planned Tasks} \times 100$$
-
-Current efficiency: 75%
-
-## Screenshots
-![UI Mockup](https://example.com/mockup-screenshot.png)
-
-## Reference Materials
-https://docs.example.com/project-guidelines
-
-▶ Detailed Technical Specifications
-Additional technical details are available in the project documentation.
-
-> [!warning] Important deadline reminder: Final review is scheduled for next Friday
-
-## Next Week Goals
-1. Start core development
-2. Create initial prototypes
-3. Schedule stakeholder review
-
-Please add this content to the specified Notion page using the proper block formatting.
-```
+- **Exhaustive Coverage**: Lists every supported Notion block type
+- **Exact Syntax**: Shows precise formatting requirements
+- **Visual Examples**: Demonstrates correct usage patterns
+- **Error Prevention**: Clear rules prevent common formatting mistakes
+- **Reliable Results**: Tested syntax that works with parseContentToBlocks function
 
 ---
 
-## ⚠️ **Important Notes**
+## 🔧 **Troubleshooting Guide**
 
-1. **Line Breaks Matter**: Each content block should be on its own line
-2. **Spacing**: Use blank lines to separate different content sections
-3. **Consistency**: Stick to the exact syntax shown above for proper parsing
-4. **Mixed Content**: You can combine different block types in a single content addition
+### **Text Formatting Issues:**
+- Ensure markdown syntax is exact: `**bold**`, `*italic*`, `` `code` ``
+- Don't mix formatting types in complex ways
+- Use proper spacing around formatting markers
 
-## 🔧 **Troubleshooting**
+### **Block Creation Problems:**
+- Check for exact syntax match (especially callouts: `> [!type]`)
+- Ensure blank lines separate different content blocks
+- Verify URLs are standalone for proper embed/bookmark creation
+- Confirm code blocks use triple backticks on separate lines
+- Make sure equations use double dollar signs: `$$equation$$`
 
-If content isn't formatting properly:
-- Check for proper spacing between sections
-- Ensure to-do items use exactly `- [ ]` and `- [x]` syntax
-- Verify code blocks use triple backticks on separate lines
-- Make sure headings have proper # spacing
-- For callouts, ensure exact syntax: `> [!type] content`
-- For equations, use proper double dollar signs: `$$equation$$`
-- For images, verify URL format: `![alt text](valid-url)`
-- For dividers, use at least 3 dashes `---` or asterisks `***`
-- For bookmarks, ensure URL is standalone on its own line
-- For toggles, use exact syntax: `▶ title` or `<details>title</details>`
+### **List and Task Issues:**
+- To-do items must use exact syntax: `- [ ]` and `- [x]`
+- Regular lists use `- ` or `* ` at start of line
+- Numbered lists use `1. `, `2. `, etc.
+
+### **Callout Problems:**
+- Only supported types: info, warning, danger, note, tip, success
+- Must start with `> [!type]` exactly
+- Content follows immediately after the type declaration
 
 ---
 
-*This guide ensures AI agents will properly format content for the Notion Advanced Tool's parseContentToBlocks function.*
+*This complete reference ensures AI agents can create any supported Notion block type with perfect formatting.*

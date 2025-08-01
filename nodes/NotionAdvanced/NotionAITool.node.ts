@@ -532,7 +532,7 @@ export class NotionAITool implements INodeType {
           type: 'divider',
           divider: {},
         });
-      } else if (trimmedLine.match(/^> \[!(info|warning|danger|note|tip)\]/i)) {
+      } else if (trimmedLine.match(/^> \[!(info|warning|danger|note|tip|success|error|question)\]/i)) {
         // Callout blocks: > [!info] content, > [!warning] content, etc.
         const match = trimmedLine.match(/^> \[!(\w+)\]\s*(.*)/i);
         if (match) {
@@ -571,13 +571,31 @@ export class NotionAITool implements INodeType {
           },
         });
       } else if (trimmedLine.match(/^https?:\/\/.*/) && !trimmedLine.includes(' ')) {
-        // Bookmark: standalone URL
-        blocks.push({
-          type: 'bookmark',
-          bookmark: {
-            url: trimmedLine,
-          },
-        });
+        // Check if it's a video URL for embed, otherwise bookmark
+        const videoPatterns = [
+          /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/|dailymotion\.com\/video\/)/i,
+          /(?:https?:\/\/)?(?:www\.)?(?:twitch\.tv\/videos\/|loom\.com\/share\/)/i
+        ];
+        
+        const isVideoUrl = videoPatterns.some(pattern => pattern.test(trimmedLine));
+        
+        if (isVideoUrl) {
+          // Embed video
+          blocks.push({
+            type: 'embed',
+            embed: {
+              url: trimmedLine,
+            },
+          });
+        } else {
+          // Regular bookmark
+          blocks.push({
+            type: 'bookmark',
+            bookmark: {
+              url: trimmedLine,
+            },
+          });
+        }
       } else if (trimmedLine.match(/^▶\s+/) || trimmedLine.match(/^<details>/)) {
         // Toggle block: ▶ title or <details>title</details>
         let title = '';
@@ -587,48 +605,59 @@ export class NotionAITool implements INodeType {
           const match = trimmedLine.match(/^<details>(.*?)<\/details>$/);
           title = match ? match[1] : '';
         }
+        
+        // Create proper toggle block structure
         blocks.push({
           type: 'toggle',
           toggle: {
-            rich_text: [createRichText(title)],
-            children: [], // Empty children for now
+            rich_text: NotionAITool.parseBasicMarkdown(title),
+            children: [], // Empty children for now - could be enhanced to parse nested content
           },
         });
       } else if (trimmedLine.match(/^\|.*\|$/)) {
         // Table row: | cell1 | cell2 | cell3 |
-        // For now, convert tables to simple paragraph format
-        // Full table support would require more complex parsing
         const cells = trimmedLine.split('|').map(cell => cell.trim()).filter(cell => cell);
+        
+        // Check if this is a header separator (|---|---|---|)
+        if (cells.every(cell => cell.match(/^-+$/))) {
+          // Skip separator rows
+          continue;
+        }
+        
+        // For individual table rows, create a simple paragraph representation
+        // Note: Full table support would require collecting multiple rows
         const tableText = cells.join(' | ');
         blocks.push({
           type: 'paragraph',
           paragraph: {
-            rich_text: [createRichText(`Table: ${tableText}`)],
+            rich_text: [createRichText(`Table Row: ${tableText}`)],
           },
         });
-      } else if (trimmedLine.match(/^- \[[ x]\] /)) {
-        // To-do list items: - [ ] or - [x]
-        const isChecked = trimmedLine.includes('[x]');
-        const text = trimmedLine.replace(/^- \[[ x]\] /, '').trim();
+      } else if (trimmedLine.match(/^- \[[ xX]\] /)) {
+        // To-do list items: - [ ] or - [x] or - [X]
+        const isChecked = trimmedLine.includes('[x]') || trimmedLine.includes('[X]');
+        const text = trimmedLine.replace(/^- \[[ xX]\] /, '').trim();
         blocks.push({
           type: 'to_do',
           to_do: {
-            rich_text: [createRichText(text)],
+            rich_text: NotionAITool.parseBasicMarkdown(text),
             checked: isChecked,
           },
         });
       } else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+        const listText = trimmedLine.substring(2).trim();
         blocks.push({
           type: 'bulleted_list_item',
           bulleted_list_item: {
-            rich_text: [createRichText(trimmedLine.substring(2).trim())],
+            rich_text: NotionAITool.parseBasicMarkdown(listText),
           },
         });
       } else if (trimmedLine.match(/^\d+\. /)) {
+        const listText = trimmedLine.replace(/^\d+\. /, '').trim();
         blocks.push({
           type: 'numbered_list_item',
           numbered_list_item: {
-            rich_text: [createRichText(trimmedLine.replace(/^\d+\. /, '').trim())],
+            rich_text: NotionAITool.parseBasicMarkdown(listText),
           },
         });
       } else if (trimmedLine.startsWith('> ')) {
@@ -704,9 +733,137 @@ export class NotionAITool implements INodeType {
 
   // Helper function to parse basic markdown formatting in text
   static parseBasicMarkdown(text: string): IDataObject[] {
-    // For now, keep it simple and just create one rich text object
-    // Advanced markdown parsing can be added later if needed
-    return [createRichText(text) as unknown as IDataObject];
+    const richTextObjects: IDataObject[] = [];
+    
+    // Find and collect all formatting patterns with their positions
+    const patterns = [
+      { regex: /\[([^\]]+)\]\(([^)]+)\)/g, type: 'link' },        // [text](url)
+      { regex: /\*\*\*([^*]+)\*\*\*/g, type: 'bold_italic' },    // ***bold italic***
+      { regex: /\*\*([^*]+)\*\*/g, type: 'bold' },               // **bold**
+      { regex: /\*([^*]+)\*/g, type: 'italic' },                 // *italic*
+      { regex: /~~([^~]+)~~/g, type: 'strikethrough' },          // ~~strikethrough~~
+      { regex: /`([^`]+)`/g, type: 'code' },                     // `code`
+    ];
+    
+    interface MatchResult {
+      start: number;
+      end: number;
+      text: string;
+      type: string;
+      url?: string;
+    }
+    
+    const matches: MatchResult[] = [];
+    
+    // Collect all matches
+    patterns.forEach(pattern => {
+      const regex = new RegExp(pattern.regex.source, 'g');
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        if (pattern.type === 'link') {
+          matches.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            text: match[1], // Link text
+            type: pattern.type,
+            url: match[2] // Link URL
+          });
+        } else {
+          matches.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            text: match[1], // Inner text
+            type: pattern.type
+          });
+        }
+      }
+    });
+    
+    // Sort matches by position and resolve overlaps (prefer longer matches)
+    matches.sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      return (b.end - b.start) - (a.end - a.start); // Prefer longer matches
+    });
+    
+    // Remove overlapping matches (keep the first/longer one)
+    const resolvedMatches: MatchResult[] = [];
+    for (const match of matches) {
+      const hasOverlap = resolvedMatches.some(existing =>
+        (match.start < existing.end && match.end > existing.start)
+      );
+      if (!hasOverlap) {
+        resolvedMatches.push(match);
+      }
+    }
+    
+    // Sort again by position
+    resolvedMatches.sort((a, b) => a.start - b.start);
+    
+    // If no formatting found, return simple rich text
+    if (resolvedMatches.length === 0) {
+      return [createRichText(text) as unknown as IDataObject];
+    }
+    
+    // Build rich text segments
+    let lastIndex = 0;
+    
+    resolvedMatches.forEach(match => {
+      // Add plain text before this match
+      if (match.start > lastIndex) {
+        const plainText = text.substring(lastIndex, match.start);
+        if (plainText) {
+          richTextObjects.push(createRichText(plainText) as unknown as IDataObject);
+        }
+      }
+      
+      // Add formatted text
+      const richTextObj: any = {
+        type: 'text',
+        text: { content: match.text },
+        annotations: {}
+      };
+      
+      // Apply formatting based on type
+      switch (match.type) {
+        case 'bold':
+          richTextObj.annotations.bold = true;
+          break;
+        case 'italic':
+          richTextObj.annotations.italic = true;
+          break;
+        case 'bold_italic':
+          richTextObj.annotations.bold = true;
+          richTextObj.annotations.italic = true;
+          break;
+        case 'strikethrough':
+          richTextObj.annotations.strikethrough = true;
+          break;
+        case 'code':
+          richTextObj.annotations.code = true;
+          break;
+        case 'link':
+          richTextObj.text.link = { url: match.url };
+          break;
+      }
+      
+      // Clean up empty annotations
+      if (Object.keys(richTextObj.annotations).length === 0) {
+        delete richTextObj.annotations;
+      }
+      
+      richTextObjects.push(richTextObj as unknown as IDataObject);
+      lastIndex = match.end;
+    });
+    
+    // Add remaining plain text
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      if (remainingText) {
+        richTextObjects.push(createRichText(remainingText) as unknown as IDataObject);
+      }
+    }
+    
+    return richTextObjects.length > 0 ? richTextObjects : [createRichText(text) as unknown as IDataObject];
   }
 
   static parsePropertiesToUpdate(propertiesString: string): IDataObject {
