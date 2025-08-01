@@ -13,6 +13,19 @@ import {
   validateCredentials,
   createRichText,
   resolvePageId,
+  createHeadingBlock,
+  createDividerBlock,
+  createCalloutBlock,
+  createImageBlock,
+  createEquationBlock,
+  createEmbedBlock,
+  createBookmarkBlock,
+  createToggleBlock,
+  createListItemBlock,
+  createToDoBlock,
+  createQuoteBlock,
+  createCodeBlock,
+  createParagraphBlock,
 } from './NotionUtils';
 
 export class NotionAITool implements INodeType {
@@ -500,6 +513,8 @@ export class NotionAITool implements INodeType {
     const normalizedContent = content.replace(/\\n/g, '\n');
     const lines = normalizedContent.split('\n');
     
+    const diagnostics: string[] = [];
+    
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
@@ -507,7 +522,7 @@ export class NotionAITool implements INodeType {
       // Skip completely empty lines
       if (!trimmedLine) continue;
 
-      // Parse different content types
+      // Create blocks directly inline (like working code blocks)
       if (trimmedLine.startsWith('# ')) {
         blocks.push({
           type: 'heading_1',
@@ -529,28 +544,37 @@ export class NotionAITool implements INodeType {
             rich_text: [createRichText(trimmedLine.substring(4).trim())],
           },
         });
-      } else if (trimmedLine.match(/^---+$/) || trimmedLine.match(/^\*\*\*+$/)) {
-        // Divider/horizontal rule: --- or ***
+      } else if (trimmedLine === '---' || trimmedLine === '***') {
+        // Divider/horizontal rule: exactly --- or ***
         blocks.push({
           type: 'divider',
           divider: {},
         });
-      } else if (trimmedLine.match(/^> \[!(info|warning|danger|note|tip|success|error|question)\]/i)) {
-        // Callout blocks: > [!info] content, > [!warning] content, etc.
-        const match = trimmedLine.match(/^> \[!(\w+)\]\s*(.*)/i);
-        if (match) {
-          const [, calloutType, text] = match;
+      } else if (trimmedLine.includes('[!') && trimmedLine.startsWith('>')) {
+        // Callout blocks: > [!info] content or >[!info] content
+        const calloutMatch = trimmedLine.match(/^>\s*\[!(\w+)\]\s*(.*)/i);
+        if (calloutMatch) {
+          const [, calloutType, text] = calloutMatch;
           const emoji = NotionAITool.getCalloutEmoji(calloutType.toLowerCase());
+          const color = NotionAITool.getCalloutColor(calloutType.toLowerCase());
           blocks.push({
             type: 'callout',
             callout: {
-              rich_text: [createRichText(text)],
+              rich_text: NotionAITool.parseBasicMarkdown(text),
               icon: { type: 'emoji', emoji },
-              color: NotionAITool.getCalloutColor(calloutType.toLowerCase()),
+              color: color,
+            },
+          });
+        } else {
+          // If callout pattern fails, treat as quote
+          blocks.push({
+            type: 'quote',
+            quote: {
+              rich_text: NotionAITool.parseBasicMarkdown(trimmedLine.substring(1).trim()),
             },
           });
         }
-      } else if (trimmedLine.match(/^!\[.*?\]\(.*?\)$/)) {
+      } else if (trimmedLine.startsWith('![') && trimmedLine.includes('](') && trimmedLine.endsWith(')')) {
         // Image: ![alt text](url)
         const match = trimmedLine.match(/^!\[(.*?)\]\((.*?)\)$/);
         if (match) {
@@ -560,30 +584,36 @@ export class NotionAITool implements INodeType {
             image: {
               type: 'external',
               external: { url },
-              caption: altText ? [createRichText(altText)] : [],
+              caption: altText ? NotionAITool.parseBasicMarkdown(altText) : [],
             },
           });
         }
-      } else if (trimmedLine.match(/^\$\$.*\$\$$/)) {
+      } else if (trimmedLine.startsWith('$$') && trimmedLine.endsWith('$$') && trimmedLine.length > 4) {
         // Equation: $$equation$$
-        const equation = trimmedLine.replace(/^\$\$/, '').replace(/\$\$$/, '').trim();
+        const equation = trimmedLine.substring(2, trimmedLine.length - 2).trim();
         blocks.push({
           type: 'equation',
           equation: {
             expression: equation,
           },
         });
-      } else if (trimmedLine.match(/^https?:\/\/.*/) && !trimmedLine.includes(' ')) {
+      } else if ((trimmedLine.startsWith('http://') || trimmedLine.startsWith('https://')) && !trimmedLine.includes(' ')) {
         // Check if it's a video URL for embed, otherwise bookmark
         const videoPatterns = [
-          /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/|dailymotion\.com\/video\/)/i,
-          /(?:https?:\/\/)?(?:www\.)?(?:twitch\.tv\/videos\/|loom\.com\/share\/)/i
+          /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)/i,
+          /(?:https?:\/\/)?(?:www\.)?(?:vimeo\.com\/)/i,
+          /(?:https?:\/\/)?(?:www\.)?(?:dailymotion\.com\/video\/)/i,
+          /(?:https?:\/\/)?(?:www\.)?(?:twitch\.tv\/)/i,
+          /(?:https?:\/\/)?(?:www\.)?(?:loom\.com\/share\/)/i,
+          /(?:https?:\/\/)?(?:www\.)?(?:figma\.com\/)/i,
+          /(?:https?:\/\/)?(?:www\.)?(?:miro\.com\/)/i,
+          /(?:https?:\/\/)?(?:codepen\.io\/)/i
         ];
         
-        const isVideoUrl = videoPatterns.some(pattern => pattern.test(trimmedLine));
+        const isEmbeddableUrl = videoPatterns.some(pattern => pattern.test(trimmedLine));
         
-        if (isVideoUrl) {
-          // Embed video
+        if (isEmbeddableUrl) {
+          // Embed content
           blocks.push({
             type: 'embed',
             embed: {
@@ -599,22 +629,24 @@ export class NotionAITool implements INodeType {
             },
           });
         }
-      } else if (trimmedLine.match(/^▶\s+/) || trimmedLine.match(/^<details>/)) {
+      } else if (trimmedLine.startsWith('▶ ') || trimmedLine.toLowerCase().startsWith('<details>')) {
         // Toggle block: ▶ title or <details>title</details>
         let title = '';
         if (trimmedLine.startsWith('▶ ')) {
           title = trimmedLine.substring(2).trim();
-        } else if (trimmedLine.match(/^<details>(.*?)<\/details>$/)) {
-          const match = trimmedLine.match(/^<details>(.*?)<\/details>$/);
-          title = match ? match[1] : '';
+        } else if (trimmedLine.toLowerCase().includes('</details>')) {
+          const match = trimmedLine.match(/^<details>(.*?)<\/details>$/i);
+          title = match ? match[1] : trimmedLine.replace(/<\/?details>/gi, '').trim();
+        } else {
+          // Handle just opening tag
+          title = trimmedLine.replace(/^<details>\s*/i, '').trim();
         }
         
-        // Create proper toggle block structure
         blocks.push({
           type: 'toggle',
           toggle: {
             rich_text: NotionAITool.parseBasicMarkdown(title),
-            children: [], // Empty children for now - could be enhanced to parse nested content
+            children: [],
           },
         });
       } else if (trimmedLine.match(/^\|.*\|$/)) {
@@ -636,10 +668,10 @@ export class NotionAITool implements INodeType {
             rich_text: [createRichText(`Table Row: ${tableText}`)],
           },
         });
-      } else if (trimmedLine.match(/^- \[[ xX]\] /)) {
+      } else if (trimmedLine.startsWith('- [') && (trimmedLine.includes('[ ]') || trimmedLine.includes('[x]') || trimmedLine.includes('[X]'))) {
         // To-do list items: - [ ] or - [x] or - [X]
         const isChecked = trimmedLine.includes('[x]') || trimmedLine.includes('[X]');
-        const text = trimmedLine.replace(/^- \[[ xX]\] /, '').trim();
+        const text = trimmedLine.replace(/^-\s*\[[ xX]\]\s*/, '').trim();
         blocks.push({
           type: 'to_do',
           to_do: {
@@ -647,7 +679,8 @@ export class NotionAITool implements INodeType {
             checked: isChecked,
           },
         });
-      } else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+      } else if (trimmedLine.startsWith('- ') && !trimmedLine.startsWith('- [')) {
+        // Bullet list items: - item (but not todos)
         const listText = trimmedLine.substring(2).trim();
         blocks.push({
           type: 'bulleted_list_item',
@@ -655,19 +688,21 @@ export class NotionAITool implements INodeType {
             rich_text: NotionAITool.parseBasicMarkdown(listText),
           },
         });
-      } else if (trimmedLine.match(/^\d+\. /)) {
-        const listText = trimmedLine.replace(/^\d+\. /, '').trim();
+      } else if (/^\d+\.\s/.test(trimmedLine)) {
+        // Numbered list items: 1. item
+        const listText = trimmedLine.replace(/^\d+\.\s/, '').trim();
         blocks.push({
           type: 'numbered_list_item',
           numbered_list_item: {
             rich_text: NotionAITool.parseBasicMarkdown(listText),
           },
         });
-      } else if (trimmedLine.startsWith('> ')) {
+      } else if (trimmedLine.startsWith('> ') && !trimmedLine.includes('[!')) {
+        // Quote block (but not callout)
         blocks.push({
           type: 'quote',
           quote: {
-            rich_text: [createRichText(trimmedLine.substring(2).trim())],
+            rich_text: NotionAITool.parseBasicMarkdown(trimmedLine.substring(2).trim()),
           },
         });
       } else if (trimmedLine.startsWith('```')) {
@@ -686,7 +721,7 @@ export class NotionAITool implements INodeType {
           type: 'code',
           code: {
             rich_text: [createRichText(codeLines.join('\n'))],
-            language: language,
+            language: language === 'plain text' ? 'plain_text' : language,
           },
         });
       } else {

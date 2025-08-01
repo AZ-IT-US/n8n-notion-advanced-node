@@ -367,6 +367,24 @@ export function createEmbedBlock(url: string, caption?: RichTextObject[]): Block
 }
 
 /**
+ * Creates a toggle block
+ */
+export function createToggleBlock(
+  text: string | RichTextObject[],
+  color?: NotionColor,
+  children?: Block[],
+): Block {
+  return {
+    type: 'toggle',
+    toggle: {
+      rich_text: typeof text === 'string' ? [createRichText(text)] : text,
+      color,
+      children,
+    },
+  };
+}
+
+/**
  * Creates a table block with rows
  */
 export function createTableBlock(

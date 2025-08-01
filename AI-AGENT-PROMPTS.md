@@ -27,6 +27,8 @@ When working with Notion content, you can create the following block types using
 **3. LISTS:**
 - [ ] Incomplete task (creates to_do block, unchecked)
 - [x] Completed task (creates to_do block, checked)
+* [ ] Alternative todo syntax (creates to_do block, unchecked)
+* [x] Alternative completed task (creates to_do block, checked)
 - Bullet point (creates bulleted_list_item block)
 * Alternative bullet syntax (creates bulleted_list_item block)
 1. First numbered item (creates numbered_list_item block)
@@ -36,13 +38,15 @@ When working with Notion content, you can create the following block types using
 > This is a quote block (creates quote block)
 > Multi-line quotes work too
 
-**5. CALLOUTS (6 types with different colors/icons):**
+**5. CALLOUTS (8 types with different colors/icons):**
 > [!info] Information callout (blue, ℹ️ icon)
 > [!warning] Warning callout (yellow, ⚠️ icon)
 > [!danger] Danger callout (red, 🚨 icon)
+> [!error] Error callout (red, ❌ icon)
 > [!note] Note callout (gray, 📝 icon)
 > [!tip] Tip callout (green, 💡 icon)
 > [!success] Success callout (green, ✅ icon)
+> [!question] Question callout (purple, ❓ icon)
 
 **6. CODE BLOCKS:**
 ```javascript
@@ -58,18 +62,25 @@ $$\sum_{i=1}^{n} x_i$$ (supports LaTeX syntax)
 **8. VISUAL ELEMENTS:**
 ![Image description](https://image-url.com/image.jpg) (creates image block)
 ---
-(creates divider block - use 3 or more dashes)
+(creates divider block - requires 3+ dashes or asterisks)
+***
+(alternative divider syntax - requires 3+ asterisks)
 
 **9. INTERACTIVE BLOCKS:**
 ▶ Toggle title (creates toggle block - collapsible)
-<details>Alternative toggle syntax</details> (also creates toggle block)
+<details>Alternative toggle syntax</details> (creates toggle block)
+<details>Simple toggle (creates toggle block with just opening tag)
 
 **10. MEDIA & LINKS:**
-https://youtube.com/watch?v=abc123 (creates embed block for videos)
+https://youtube.com/watch?v=abc123 (creates embed block)
+https://youtu.be/abc123 (creates embed block)
 https://vimeo.com/123456789 (creates embed block)
 https://twitch.tv/videos/123456 (creates embed block)
 https://loom.com/share/abc123 (creates embed block)
-https://docs.example.com (creates bookmark block for non-video URLs)
+https://figma.com/file/abc123 (creates embed block)
+https://miro.com/app/board/abc123 (creates embed block)
+https://codepen.io/user/pen/abc123 (creates embed block)
+https://docs.example.com (creates bookmark block for non-embeddable URLs)
 
 **11. TABLES:**
 | Column 1 | Column 2 | Column 3 | (creates table representation)
@@ -82,9 +93,11 @@ Regular text becomes paragraph blocks with rich text formatting support.
 - Each block type must be on its own line
 - Separate different content blocks with blank lines
 - URLs must be standalone (no surrounding text) to become embeds/bookmarks
-- Use EXACT syntax shown above - no variations
-- Callout types: info, warning, danger, note, tip, success only
+- Callout types: info, warning, danger, error, note, tip, success, question
+- Use 3+ dashes (---) or asterisks (***) for dividers
 - Code blocks need language specified after opening ```
+- Flexible spacing allowed for lists and callouts
+- Both `- [ ]` and `* [ ]` work for todo items
 
 **EXAMPLE WITH ALL BLOCK TYPES:**
 # Project Documentation
@@ -163,25 +176,28 @@ Whether creating meeting notes, project updates, documentation, or reports, this
 
 ### **Text Formatting Issues:**
 - Ensure markdown syntax is exact: `**bold**`, `*italic*`, `` `code` ``
-- Don't mix formatting types in complex ways
+- Links: `[text](url)` - both text and URL required
+- Strikethrough: `~~text~~` - requires double tildes
 - Use proper spacing around formatting markers
 
 ### **Block Creation Problems:**
-- Check for exact syntax match (especially callouts: `> [!type]`)
+- Callouts: Use `> [!type]` format (flexible spacing after > allowed)
 - Ensure blank lines separate different content blocks
-- Verify URLs are standalone for proper embed/bookmark creation
-- Confirm code blocks use triple backticks on separate lines
-- Make sure equations use double dollar signs: `$$equation$$`
+- URLs must be standalone for proper embed/bookmark creation
+- Code blocks: Use triple backticks (```) on separate lines with language
+- Equations: Use double dollar signs: `$$equation$$`
+- Dividers: Require 3+ dashes (---) or asterisks (***)
 
 ### **List and Task Issues:**
-- To-do items must use exact syntax: `- [ ]` and `- [x]`
-- Regular lists use `- ` or `* ` at start of line
-- Numbered lists use `1. `, `2. `, etc.
+- To-do items: `- [ ]` / `- [x]` or `* [ ]` / `* [x]` (flexible spacing)
+- Regular lists: `- item` or `* item` (flexible spacing after marker)
+- Numbered lists: `1. item`, `2. item`, etc. (flexible spacing after number)
 
 ### **Callout Problems:**
-- Only supported types: info, warning, danger, note, tip, success
-- Must start with `> [!type]` exactly
+- Supported types: info, warning, danger, error, note, tip, success, question
+- Format: `> [!type] content` (flexible spacing after > allowed)
 - Content follows immediately after the type declaration
+- Case insensitive: `[!INFO]` and `[!info]` both work
 
 ---
 
