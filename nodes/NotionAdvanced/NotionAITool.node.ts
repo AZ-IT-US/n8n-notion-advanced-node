@@ -498,87 +498,105 @@ export class NotionAITool implements INodeType {
     const lines = content.split('\n');
     
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      
+      // Skip completely empty lines
+      if (!trimmedLine) continue;
 
       // Parse different content types
-      if (line.startsWith('# ')) {
+      if (trimmedLine.startsWith('# ')) {
         blocks.push({
-          object: 'block',
           type: 'heading_1',
           heading_1: {
-            rich_text: [createRichText(line.substring(2))],
+            rich_text: [createRichText(trimmedLine.substring(2).trim())],
           },
         });
-      } else if (line.startsWith('## ')) {
+      } else if (trimmedLine.startsWith('## ')) {
         blocks.push({
-          object: 'block',
           type: 'heading_2',
           heading_2: {
-            rich_text: [createRichText(line.substring(3))],
+            rich_text: [createRichText(trimmedLine.substring(3).trim())],
           },
         });
-      } else if (line.startsWith('### ')) {
+      } else if (trimmedLine.startsWith('### ')) {
         blocks.push({
-          object: 'block',
           type: 'heading_3',
           heading_3: {
-            rich_text: [createRichText(line.substring(4))],
+            rich_text: [createRichText(trimmedLine.substring(4).trim())],
           },
         });
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      } else if (trimmedLine.match(/^- \[[ x]\] /)) {
+        // To-do list items: - [ ] or - [x]
+        const isChecked = trimmedLine.includes('[x]');
+        const text = trimmedLine.replace(/^- \[[ x]\] /, '').trim();
         blocks.push({
-          object: 'block',
+          type: 'to_do',
+          to_do: {
+            rich_text: [createRichText(text)],
+            checked: isChecked,
+          },
+        });
+      } else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+        blocks.push({
           type: 'bulleted_list_item',
           bulleted_list_item: {
-            rich_text: [createRichText(line.substring(2))],
+            rich_text: [createRichText(trimmedLine.substring(2).trim())],
           },
         });
-      } else if (line.match(/^\d+\. /)) {
+      } else if (trimmedLine.match(/^\d+\. /)) {
         blocks.push({
-          object: 'block',
           type: 'numbered_list_item',
           numbered_list_item: {
-            rich_text: [createRichText(line.replace(/^\d+\. /, ''))],
+            rich_text: [createRichText(trimmedLine.replace(/^\d+\. /, '').trim())],
           },
         });
-      } else if (line.startsWith('> ')) {
+      } else if (trimmedLine.startsWith('> ')) {
         blocks.push({
-          object: 'block',
           type: 'quote',
           quote: {
-            rich_text: [createRichText(line.substring(2))],
+            rich_text: [createRichText(trimmedLine.substring(2).trim())],
           },
         });
-      } else if (line.startsWith('```')) {
+      } else if (trimmedLine.startsWith('```')) {
         // Handle code blocks
+        const language = trimmedLine.substring(3).trim() || 'plain text';
         const codeLines: string[] = [];
         i++; // Skip the opening ```
+        
+        // Collect all code lines until closing ```
         while (i < lines.length && !lines[i].trim().startsWith('```')) {
           codeLines.push(lines[i]);
           i++;
         }
+        
         blocks.push({
-          object: 'block',
           type: 'code',
           code: {
             rich_text: [createRichText(codeLines.join('\n'))],
-            language: 'plain text',
+            language: language,
           },
         });
       } else {
-        // Regular paragraph
+        // Regular paragraph - handle basic markdown formatting
+        const richText = NotionAITool.parseBasicMarkdown(trimmedLine);
         blocks.push({
-          object: 'block',
           type: 'paragraph',
           paragraph: {
-            rich_text: [createRichText(line)],
+            rich_text: richText,
           },
         });
       }
     }
 
     return blocks;
+  }
+
+  // Helper function to parse basic markdown formatting in text
+  static parseBasicMarkdown(text: string): IDataObject[] {
+    // For now, keep it simple and just create one rich text object
+    // Advanced markdown parsing can be added later if needed
+    return [createRichText(text) as unknown as IDataObject];
   }
 
   static parsePropertiesToUpdate(propertiesString: string): IDataObject {
