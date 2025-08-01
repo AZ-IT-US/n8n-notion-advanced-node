@@ -885,6 +885,143 @@ export class NotionAITool implements INodeType {
           return `__XML_BLOCK_${blockCounter++}__`;
         }
       },
+
+      // Paragraphs: <p>content</p>
+      {
+        regex: /<p>(.*?)<\/p>/gis,
+        processor: (match: string, content: string) => {
+          blocks.push({
+            type: 'paragraph',
+            paragraph: {
+              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Bulleted lists: <ul><li>item</li></ul>
+      {
+        regex: /<ul>(.*?)<\/ul>/gis,
+        processor: (match: string, listContent: string) => {
+          // Extract individual list items
+          const items = listContent.match(/<li>(.*?)<\/li>/gis) || [];
+          items.forEach(item => {
+            const itemContent = item.replace(/<\/?li>/gi, '').trim();
+            blocks.push({
+              type: 'bulleted_list_item',
+              bulleted_list_item: {
+                rich_text: NotionAITool.parseBasicMarkdown(itemContent),
+              },
+            });
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Numbered lists: <ol><li>item</li></ol>
+      {
+        regex: /<ol>(.*?)<\/ol>/gis,
+        processor: (match: string, listContent: string) => {
+          // Extract individual list items
+          const items = listContent.match(/<li>(.*?)<\/li>/gis) || [];
+          items.forEach(item => {
+            const itemContent = item.replace(/<\/?li>/gi, '').trim();
+            blocks.push({
+              type: 'numbered_list_item',
+              numbered_list_item: {
+                rich_text: NotionAITool.parseBasicMarkdown(itemContent),
+              },
+            });
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Standalone list items: <li>content</li>
+      {
+        regex: /<li>(.*?)<\/li>/gis,
+        processor: (match: string, content: string) => {
+          blocks.push({
+            type: 'bulleted_list_item',
+            bulleted_list_item: {
+              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Blockquotes: <blockquote>content</blockquote>
+      {
+        regex: /<blockquote>(.*?)<\/blockquote>/gis,
+        processor: (match: string, content: string) => {
+          blocks.push({
+            type: 'quote',
+            quote: {
+              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Preformatted text: <pre>content</pre>
+      {
+        regex: /<pre>(.*?)<\/pre>/gis,
+        processor: (match: string, content: string) => {
+          blocks.push({
+            type: 'code',
+            code: {
+              rich_text: [createRichText(content.trim())],
+              language: 'plain_text',
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Strong/Bold: <strong>content</strong> or <b>content</b>
+      {
+        regex: /<(strong|b)>(.*?)<\/(strong|b)>/gis,
+        processor: (match: string, tag: string, content: string) => {
+          blocks.push({
+            type: 'paragraph',
+            paragraph: {
+              rich_text: NotionAITool.parseBasicMarkdown(`**${content.trim()}**`),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Emphasis/Italic: <em>content</em> or <i>content</i>
+      {
+        regex: /<(em|i)>(.*?)<\/(em|i)>/gis,
+        processor: (match: string, tag: string, content: string) => {
+          blocks.push({
+            type: 'paragraph',
+            paragraph: {
+              rich_text: NotionAITool.parseBasicMarkdown(`*${content.trim()}*`),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Line breaks: <br/> or <br>
+      {
+        regex: /<br\s*\/?>/gis,
+        processor: (match: string) => {
+          blocks.push({
+            type: 'paragraph',
+            paragraph: {
+              rich_text: [createRichText('')],
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
     ];
 
     // Process each tag type

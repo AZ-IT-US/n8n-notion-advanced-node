@@ -30,7 +30,7 @@ The Notion AI Tool now supports advanced XML-like tag formatting for precise, un
 **Content**: Plain text with rich formatting support  
 **Example**: `<h1>Project **Alpha** Documentation</h1>`
 
-### 2. Callouts
+### 5. Callouts
 ```xml
 <callout type="info">Information callout with clear purpose</callout>
 <callout type="warning">Warning about potential issues</callout>
@@ -47,7 +47,7 @@ The Notion AI Tool now supports advanced XML-like tag formatting for precise, un
 **Icons**: Automatically assigned based on type  
 **Colors**: Automatically assigned based on type
 
-### 3. Code Blocks
+### 6. Code Blocks
 ```xml
 <code language="javascript">
 function example() {
@@ -78,7 +78,7 @@ Plain text code without syntax highlighting
 **Content**: Raw code content  
 **Default**: If no language specified, uses `plain_text`
 
-### 4. Images
+### 7. Images
 ```xml
 <!-- Full image with caption -->
 <image src="https://example.com/diagram.jpg" alt="System Architecture">
@@ -97,7 +97,7 @@ This diagram shows the complete system architecture with **microservices** and *
 **Content**: Optional caption with rich text formatting  
 **Fallback**: Alt text used as caption if no content provided
 
-### 5. Equations
+### 8. Equations
 ```xml
 <equation>E = mc^2</equation>
 <equation>\int_{a}^{b} x^2 dx = \frac{b^3 - a^3}{3}</equation>
@@ -109,7 +109,7 @@ This diagram shows the complete system architecture with **microservices** and *
 **Content**: LaTeX mathematical expressions  
 **Support**: Full LaTeX equation syntax
 
-### 6. Embeds and Bookmarks
+### 9. Embeds and Bookmarks
 ```xml
 <!-- Embeds for interactive/video content -->
 <embed>https://youtube.com/watch?v=dQw4w9WgXcQ</embed>
@@ -129,7 +129,7 @@ This diagram shows the complete system architecture with **microservices** and *
 **Content**: URL only  
 **Automatic Detection**: Videos/interactive tools become embeds, others become bookmarks
 
-### 7. Toggles
+### 10. Toggles
 ```xml
 <toggle>Click to expand configuration details</toggle>
 <toggle>FAQ: How do I configure authentication?</toggle>
@@ -141,7 +141,7 @@ This diagram shows the complete system architecture with **microservices** and *
 **Content**: Toggle title with rich text formatting support  
 **Behavior**: Creates collapsible section in Notion
 
-### 8. Quotes
+### 11. Quotes
 ```xml
 <quote>The best code is **well-documented** and *self-explanatory*.</quote>
 <quote>Innovation distinguishes between a leader and a follower. - Steve Jobs</quote>
@@ -152,7 +152,31 @@ This diagram shows the complete system architecture with **microservices** and *
 **Content**: Quote text with full rich text formatting support  
 **Use Case**: Citations, important statements, testimonials
 
-### 9. Dividers
+### 12. Quotes (Alternative HTML Syntax)
+```xml
+<blockquote>This is a quote using standard HTML blockquote syntax.</blockquote>
+<blockquote>Quotes support **bold text** and *italic formatting* as well as [links](https://example.com).</blockquote>
+```
+
+**Attributes**: None
+**Content**: Quote text with full rich text formatting support
+**Alternative**: Can also use `<quote>content</quote>` syntax
+
+### 13. Preformatted Text
+```xml
+<pre>
+This is preformatted text
+    with preserved spacing
+        and indentation
+No syntax highlighting applied
+</pre>
+```
+
+**Attributes**: None
+**Content**: Raw text with preserved formatting
+**Use Case**: Plain text code blocks, ASCII art, formatted text
+
+### 14. Dividers
 ```xml
 <divider/>
 <!-- or -->
@@ -163,7 +187,7 @@ This diagram shows the complete system architecture with **microservices** and *
 **Content**: None (self-closing or empty)  
 **Purpose**: Visual separation between content sections
 
-### 10. To-Do Items
+### 15. To-Do Items
 ```xml
 <todo checked="false">Complete project documentation</todo>
 <todo checked="true">Review code implementation</todo>
