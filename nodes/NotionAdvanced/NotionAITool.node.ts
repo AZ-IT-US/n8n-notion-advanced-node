@@ -511,18 +511,21 @@ export class NotionAITool implements INodeType {
     
     // Handle both actual newlines and escaped \n characters
     const normalizedContent = content.replace(/\\n/g, '\n');
-    const lines = normalizedContent.split('\n');
     
-    const diagnostics: string[] = [];
+    // First, process XML-like tags for reliable parsing
+    const processedContent = NotionAITool.processXmlTags(normalizedContent, blocks);
+    
+    // Then process remaining content with traditional markdown patterns
+    const lines = processedContent.split('\n');
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmedLine = line.trim();
       
-      // Skip completely empty lines
-      if (!trimmedLine) continue;
+      // Skip completely empty lines and XML placeholders
+      if (!trimmedLine || trimmedLine.startsWith('__XML_BLOCK_')) continue;
 
-      // Create blocks directly inline (like working code blocks)
+      // Traditional markdown patterns (for backwards compatibility)
       if (trimmedLine.startsWith('# ')) {
         blocks.push({
           type: 'heading_1',
@@ -545,13 +548,12 @@ export class NotionAITool implements INodeType {
           },
         });
       } else if (trimmedLine === '---' || trimmedLine === '***') {
-        // Divider/horizontal rule: exactly --- or ***
         blocks.push({
           type: 'divider',
           divider: {},
         });
       } else if (trimmedLine.includes('[!') && trimmedLine.startsWith('>')) {
-        // Callout blocks: > [!info] content or >[!info] content
+        // Callout blocks: > [!info] content
         const calloutMatch = trimmedLine.match(/^>\s*\[!(\w+)\]\s*(.*)/i);
         if (calloutMatch) {
           const [, calloutType, text] = calloutMatch;
@@ -566,7 +568,6 @@ export class NotionAITool implements INodeType {
             },
           });
         } else {
-          // If callout pattern fails, treat as quote
           blocks.push({
             type: 'quote',
             quote: {
@@ -613,7 +614,6 @@ export class NotionAITool implements INodeType {
         const isEmbeddableUrl = videoPatterns.some(pattern => pattern.test(trimmedLine));
         
         if (isEmbeddableUrl) {
-          // Embed content
           blocks.push({
             type: 'embed',
             embed: {
@@ -621,7 +621,6 @@ export class NotionAITool implements INodeType {
             },
           });
         } else {
-          // Regular bookmark
           blocks.push({
             type: 'bookmark',
             bookmark: {
@@ -629,45 +628,6 @@ export class NotionAITool implements INodeType {
             },
           });
         }
-      } else if (trimmedLine.startsWith('▶ ') || trimmedLine.toLowerCase().startsWith('<details>')) {
-        // Toggle block: ▶ title or <details>title</details>
-        let title = '';
-        if (trimmedLine.startsWith('▶ ')) {
-          title = trimmedLine.substring(2).trim();
-        } else if (trimmedLine.toLowerCase().includes('</details>')) {
-          const match = trimmedLine.match(/^<details>(.*?)<\/details>$/i);
-          title = match ? match[1] : trimmedLine.replace(/<\/?details>/gi, '').trim();
-        } else {
-          // Handle just opening tag
-          title = trimmedLine.replace(/^<details>\s*/i, '').trim();
-        }
-        
-        blocks.push({
-          type: 'toggle',
-          toggle: {
-            rich_text: NotionAITool.parseBasicMarkdown(title),
-            children: [],
-          },
-        });
-      } else if (trimmedLine.match(/^\|.*\|$/)) {
-        // Table row: | cell1 | cell2 | cell3 |
-        const cells = trimmedLine.split('|').map(cell => cell.trim()).filter(cell => cell);
-        
-        // Check if this is a header separator (|---|---|---|)
-        if (cells.every(cell => cell.match(/^-+$/))) {
-          // Skip separator rows
-          continue;
-        }
-        
-        // For individual table rows, create a simple paragraph representation
-        // Note: Full table support would require collecting multiple rows
-        const tableText = cells.join(' | ');
-        blocks.push({
-          type: 'paragraph',
-          paragraph: {
-            rich_text: [createRichText(`Table Row: ${tableText}`)],
-          },
-        });
       } else if (trimmedLine.startsWith('- [') && (trimmedLine.includes('[ ]') || trimmedLine.includes('[x]') || trimmedLine.includes('[X]'))) {
         // To-do list items: - [ ] or - [x] or - [X]
         const isChecked = trimmedLine.includes('[x]') || trimmedLine.includes('[X]');
@@ -737,6 +697,204 @@ export class NotionAITool implements INodeType {
     }
 
     return blocks;
+  }
+
+  // New XML-like tag processing function
+  static processXmlTags(content: string, blocks: IDataObject[]): string {
+    let processedContent = content;
+    let blockCounter = 0;
+
+    // Process XML-like tags in order of priority
+    const tagProcessors = [
+      // Callouts: <callout type="info">content</callout>
+      {
+        regex: /<callout\s*(?:type="([^"]*)")?\s*>(.*?)<\/callout>/gis,
+        processor: (match: string, type: string = 'info', content: string) => {
+          const emoji = NotionAITool.getCalloutEmoji(type.toLowerCase());
+          const color = NotionAITool.getCalloutColor(type.toLowerCase());
+          blocks.push({
+            type: 'callout',
+            callout: {
+              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+              icon: { type: 'emoji', emoji },
+              color: color,
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Code blocks: <code language="javascript">content</code>
+      {
+        regex: /<code\s*(?:language="([^"]*)")?\s*>(.*?)<\/code>/gis,
+        processor: (match: string, language: string = 'plain_text', content: string) => {
+          blocks.push({
+            type: 'code',
+            code: {
+              rich_text: [createRichText(content.trim())],
+              language: language === 'plain text' ? 'plain_text' : language,
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Images: <image src="url" alt="description">caption</image>
+      {
+        regex: /<image\s+src="([^"]*)"(?:\s+alt="([^"]*)")?\s*>(.*?)<\/image>/gis,
+        processor: (match: string, src: string, alt: string = '', caption: string = '') => {
+          const captionText = caption.trim() || alt;
+          blocks.push({
+            type: 'image',
+            image: {
+              type: 'external',
+              external: { url: src },
+              caption: captionText ? NotionAITool.parseBasicMarkdown(captionText) : [],
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Self-closing images: <image src="url" alt="description"/>
+      {
+        regex: /<image\s+src="([^"]*)"(?:\s+alt="([^"]*)")?\s*\/>/gis,
+        processor: (match: string, src: string, alt: string = '') => {
+          blocks.push({
+            type: 'image',
+            image: {
+              type: 'external',
+              external: { url: src },
+              caption: alt ? NotionAITool.parseBasicMarkdown(alt) : [],
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Equations: <equation>E=mc^2</equation>
+      {
+        regex: /<equation>(.*?)<\/equation>/gis,
+        processor: (match: string, expression: string) => {
+          blocks.push({
+            type: 'equation',
+            equation: {
+              expression: expression.trim(),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Embeds: <embed>url</embed>
+      {
+        regex: /<embed>(.*?)<\/embed>/gis,
+        processor: (match: string, url: string) => {
+          blocks.push({
+            type: 'embed',
+            embed: {
+              url: url.trim(),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Bookmarks: <bookmark>url</bookmark>
+      {
+        regex: /<bookmark>(.*?)<\/bookmark>/gis,
+        processor: (match: string, url: string) => {
+          blocks.push({
+            type: 'bookmark',
+            bookmark: {
+              url: url.trim(),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Toggles: <toggle>title</toggle>
+      {
+        regex: /<toggle>(.*?)<\/toggle>/gis,
+        processor: (match: string, title: string) => {
+          blocks.push({
+            type: 'toggle',
+            toggle: {
+              rich_text: NotionAITool.parseBasicMarkdown(title.trim()),
+              children: [],
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Quotes: <quote>content</quote>
+      {
+        regex: /<quote>(.*?)<\/quote>/gis,
+        processor: (match: string, content: string) => {
+          blocks.push({
+            type: 'quote',
+            quote: {
+              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Dividers: <divider/> or <divider></divider>
+      {
+        regex: /<divider\s*\/?>/gis,
+        processor: (match: string) => {
+          blocks.push({
+            type: 'divider',
+            divider: {},
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // To-do items: <todo checked="true">content</todo>
+      {
+        regex: /<todo\s*(?:checked="([^"]*)")?\s*>(.*?)<\/todo>/gis,
+        processor: (match: string, checked: string = 'false', content: string) => {
+          const isChecked = checked.toLowerCase() === 'true';
+          blocks.push({
+            type: 'to_do',
+            to_do: {
+              rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+              checked: isChecked,
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+
+      // Headings: <h1>content</h1>, <h2>content</h2>, <h3>content</h3>
+      {
+        regex: /<h([123])>(.*?)<\/h[123]>/gis,
+        processor: (match: string, level: string, content: string) => {
+          const headingType = `heading_${level}` as 'heading_1' | 'heading_2' | 'heading_3';
+          blocks.push({
+            type: headingType,
+            [headingType]: {
+              rich_text: [createRichText(content.trim())],
+            },
+          });
+          return `__XML_BLOCK_${blockCounter++}__`;
+        }
+      },
+    ];
+
+    // Process each tag type
+    tagProcessors.forEach(({ regex, processor }) => {
+      processedContent = processedContent.replace(regex, (match: string, group1?: string, group2?: string, group3?: string) => {
+        return processor(match, group1 || '', group2 || '', group3 || '');
+      });
+    });
+
+    return processedContent;
   }
 
   // Helper function to get callout emoji based on type
