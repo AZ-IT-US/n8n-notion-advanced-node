@@ -371,10 +371,34 @@ export class NotionAITool implements INodeType {
     return [this.helpers.returnJsonArray(responseData)];
   }
 
+  // Helper method to support both camelCase and underscore parameter names for AI agent compatibility
+  static getFlexibleParameter(executeFunctions: IExecuteFunctions, itemIndex: number, primaryName: string, alternativeNames: string[] = [], defaultValue?: any): any {
+    try {
+      // First try the primary (camelCase) parameter name
+      return executeFunctions.getNodeParameter(primaryName, itemIndex, defaultValue);
+    } catch (error) {
+      // If that fails, try each alternative name
+      for (const altName of alternativeNames) {
+        try {
+          return executeFunctions.getNodeParameter(altName, itemIndex, defaultValue);
+        } catch (altError) {
+          // Continue to next alternative
+        }
+      }
+      
+      // If all parameter names fail, return default value or throw original error
+      if (defaultValue !== undefined) {
+        return defaultValue;
+      }
+      throw error;
+    }
+  }
+
   static async createPageWithContent(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const pageTitle = executeFunctions.getNodeParameter('pageTitle', itemIndex) as string;
-    const parentId = executeFunctions.getNodeParameter('parentId', itemIndex) as string;
-    const content = executeFunctions.getNodeParameter('content', itemIndex, '') as string;
+    // Support both camelCase and underscore parameter names for AI agent compatibility
+    const pageTitle = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'pageTitle', ['Page_Title', 'page_title']);
+    const parentId = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'parentId', ['Parent_Page_Database_ID', 'parent_id', 'parentPageDatabaseId']);
+    const content = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'content', ['Content'], '');
     const additionalOptions = executeFunctions.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
 
     const resolvedParentId = await resolvePageId.call(executeFunctions, parentId);
@@ -418,8 +442,8 @@ export class NotionAITool implements INodeType {
   }
 
   static async addContentToPage(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const targetPageId = executeFunctions.getNodeParameter('targetPageId', itemIndex) as string;
-    const content = executeFunctions.getNodeParameter('content', itemIndex) as string;
+    const targetPageId = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'targetPageId', ['Target_Page_ID', 'target_page_id']);
+    const content = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'content', ['Content']);
 
     const resolvedPageId = await resolvePageId.call(executeFunctions, targetPageId);
     const blocks = NotionAITool.parseContentToBlocks(content);
@@ -441,7 +465,7 @@ export class NotionAITool implements INodeType {
   }
 
   static async searchPages(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const searchQuery = executeFunctions.getNodeParameter('searchQuery', itemIndex, '') as string;
+    const searchQuery = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'searchQuery', ['Search_Query', 'search_query'], '');
     const additionalOptions = executeFunctions.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
     const maxResults = (additionalOptions.maxResults as number) || 20;
 
@@ -468,8 +492,8 @@ export class NotionAITool implements INodeType {
   }
 
   static async updatePageProperties(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const targetPageId = executeFunctions.getNodeParameter('targetPageId', itemIndex) as string;
-    const propertiesToUpdate = executeFunctions.getNodeParameter('propertiesToUpdate', itemIndex) as string;
+    const targetPageId = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'targetPageId', ['Target_Page_ID', 'target_page_id']);
+    const propertiesToUpdate = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'propertiesToUpdate', ['Properties_To_Update', 'properties_to_update']);
 
     const resolvedPageId = await resolvePageId.call(executeFunctions, targetPageId);
     const properties = NotionAITool.parsePropertiesToUpdate(propertiesToUpdate);
@@ -487,8 +511,8 @@ export class NotionAITool implements INodeType {
   }
 
   static async createDatabaseEntry(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const parentId = executeFunctions.getNodeParameter('parentId', itemIndex) as string;
-    const entryProperties = executeFunctions.getNodeParameter('entryProperties', itemIndex) as string;
+    const parentId = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'parentId', ['Parent_Page_Database_ID', 'parent_id', 'parentPageDatabaseId']);
+    const entryProperties = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'entryProperties', ['Entry_Properties', 'entry_properties']);
 
     const resolvedParentId = await resolvePageId.call(executeFunctions, parentId);
     const properties = NotionAITool.parsePropertiesToUpdate(entryProperties);
@@ -507,8 +531,8 @@ export class NotionAITool implements INodeType {
   }
 
   static async queryDatabase(executeFunctions: IExecuteFunctions, itemIndex: number): Promise<IDataObject> {
-    const databaseId = executeFunctions.getNodeParameter('databaseId', itemIndex) as string;
-    const queryFilter = executeFunctions.getNodeParameter('queryFilter', itemIndex, '') as string;
+    const databaseId = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'databaseId', ['Database_ID', 'database_id']);
+    const queryFilter = NotionAITool.getFlexibleParameter(executeFunctions, itemIndex, 'queryFilter', ['Query_Filter', 'query_filter'], '');
     const additionalOptions = executeFunctions.getNodeParameter('additionalOptions', itemIndex, {}) as IDataObject;
     const maxResults = (additionalOptions.maxResults as number) || 20;
 
