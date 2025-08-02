@@ -1,4 +1,4 @@
-const { NotionAITool } = require('./dist/nodes/NotionAdvanced/NotionAITool.node.js');
+const { NotionAITool } = require('../dist/nodes/NotionAdvanced/NotionAITool.node.js');
 
 // Test content with ALL supported child block types in list items
 const testContent = `

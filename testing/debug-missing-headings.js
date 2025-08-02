@@ -1,4 +1,4 @@
-const { NotionAITool } = require('./dist/nodes/NotionAdvanced/NotionAITool.node.js');
+const { NotionAITool } = require('../dist/nodes/NotionAdvanced/NotionAITool.node.js');
 
 const testContent = `<h1>Complex Lists Examples in Notion</h1>
 <p>This page demonstrates advanced examples of using lists in Notion, including nested lists, mixed ordered and unordered lists, and descriptive list items.</p>

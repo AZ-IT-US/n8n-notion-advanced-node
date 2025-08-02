@@ -1,4 +1,4 @@
-const { NotionAITool } = require('./dist/nodes/NotionAdvanced/NotionAITool.node.js');
+const { NotionAITool } = require('../dist/nodes/NotionAdvanced/NotionAITool.node.js');
 
 console.log('🔍 EMBED TRACE DEBUG');
 console.log('================================================================================');

@@ -1,4 +1,4 @@
-const { NotionAITool } = require('./dist/nodes/NotionAdvanced/NotionAITool.node.js');
+const { NotionAITool } = require('../dist/nodes/NotionAdvanced/NotionAITool.node.js');
 
 // Exact user AI input content
 const userContent = `<h1>Complete Guide to All Notion Block Types with Examples</h1>

@@ -1,4 +1,4 @@
-const { NotionAITool } = require('./dist/nodes/NotionAdvanced/NotionAITool.node.js');
+const { NotionAITool } = require('../dist/nodes/NotionAdvanced/NotionAITool.node.js');
 
 // Create test input matching user's reported issue
 const testContent = `<h1>Different Format Types in Notion</h1><p>This page demonstrates various formatting types used in Notion with examples.</p><h2>Text Blocks</h2><ul><li>Paragraph: <p>This is a paragraph.</p></li><li>Headings: <h1>Main Title</h1>, <h2>Section Title</h2>, <h3>Subsection Title</h3></li><li>Blockquote: <blockquote>Quote text example.</blockquote></li></ul><h2>Lists</h2><ul><li>Unordered list with bullets.</li><li>Ordered list with numbers.</li></ul><h2>Callouts</h2><callout type="info">Information callout example.</callout><callout type="warning">Warning callout example.</callout>`;

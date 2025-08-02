@@ -1,4 +1,4 @@
-const { NotionAITool } = require('./dist/nodes/NotionAdvanced/NotionAITool.node.js');
+const { NotionAITool } = require('../dist/nodes/NotionAdvanced/NotionAITool.node.js');
 
 // Test the specific formatting issue from user feedback
 const testContent = `<ul><li><strong>Paragraph:</strong> <p>This is a paragraph block used for general text content.</p></li><li><strong>Heading 1:</strong> <h1>Heading level 1</h1></li></ul>`;
