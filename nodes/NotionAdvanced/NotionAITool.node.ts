@@ -848,40 +848,83 @@ export class NotionAITool implements INodeType {
     }
   }
 
-  // Enhanced hierarchical XML tree structure that catches ALL XML content
+  // Enhanced hierarchical XML tree structure using depth-aware parsing
   static buildXMLTree(content: string, tagProcessors: any[]): XMLNode[] {
     const allMatches: XMLNode[] = [];
-    const processedRanges: { start: number; end: number; }[] = [];
     
-    // Step 1: Collect all XML tags with specific processors
+    // Step 1: Use depth-aware parsing for each tag processor
     tagProcessors.forEach(({ regex, blockCreator, listProcessor }) => {
-      const globalRegex = new RegExp(regex.source, 'gis');
-      let match;
-      while ((match = globalRegex.exec(content)) !== null) {
-        const tagName = match[0].match(/<(\w+)/)?.[1] || 'unknown';
-        const xmlNode = {
-          id: `${tagName}_${match.index}_${Date.now()}_${Math.random()}`,
-          tagName,
-          start: match.index,
-          end: match.index + match[0].length,
-          match: match[0],
-          processor: blockCreator,
-          groups: match.slice(1),
-          children: [],
-          depth: 0,
-          innerContent: match[0],
-          replacement: undefined,
-          listProcessor
-        };
-        allMatches.push(xmlNode);
-        processedRanges.push({ start: xmlNode.start, end: xmlNode.end });
+      const tagPattern = regex.source.match(/<(\w+)/)?.[1];
+      if (!tagPattern) return;
+      
+      // Find all opening tags of this type
+      let pos = 0;
+      while (pos < content.length) {
+        const openTagStart = content.indexOf(`<${tagPattern}`, pos);
+        if (openTagStart === -1) break;
+        
+        const openTagEnd = content.indexOf('>', openTagStart);
+        if (openTagEnd === -1) break;
+        
+        // Find matching closing tag using depth tracking
+        let depth = 1;
+        let searchPos = openTagEnd + 1;
+        let closeTagStart = -1;
+        
+        const openPattern = `<${tagPattern}`;
+        const closePattern = `</${tagPattern}>`;
+        
+        while (searchPos < content.length && depth > 0) {
+          const nextOpen = content.indexOf(openPattern, searchPos);
+          const nextClose = content.indexOf(closePattern, searchPos);
+          
+          if (nextClose === -1) break;
+          
+          if (nextOpen !== -1 && nextOpen < nextClose) {
+            // Found nested opening tag
+            depth++;
+            searchPos = nextOpen + openPattern.length;
+          } else {
+            // Found closing tag
+            depth--;
+            if (depth === 0) {
+              closeTagStart = nextClose;
+              break;
+            }
+            searchPos = nextClose + closePattern.length;
+          }
+        }
+        
+        if (closeTagStart !== -1) {
+          const fullMatch = content.substring(openTagStart, closeTagStart + closePattern.length);
+          const innerContent = content.substring(openTagEnd + 1, closeTagStart);
+          
+          const xmlNode = {
+            id: `${tagPattern}_${openTagStart}_${Date.now()}_${Math.random()}`,
+            tagName: tagPattern,
+            start: openTagStart,
+            end: closeTagStart + closePattern.length,
+            match: fullMatch,
+            processor: blockCreator,
+            groups: [innerContent], // For list processors, group[0] is the inner content
+            children: [],
+            depth: 0,
+            innerContent,
+            replacement: undefined,
+            listProcessor
+          };
+          allMatches.push(xmlNode);
+        }
+        
+        pos = openTagEnd + 1;
       }
     });
 
     // Step 2: Catch ANY remaining XML/HTML tags that weren't processed by specific processors
-    // This prevents ANY XML content from falling through to traditional processing
     const genericXmlRegex = /<[^>]+>[\s\S]*?<\/[^>]+>|<[^>]+\/>/gis;
     let genericMatch;
+    const processedRanges = allMatches.map(node => ({ start: node.start, end: node.end }));
+    
     while ((genericMatch = genericXmlRegex.exec(content)) !== null) {
       const matchStart = genericMatch.index;
       const matchEnd = genericMatch.index + genericMatch[0].length;
@@ -899,7 +942,7 @@ export class NotionAITool implements INodeType {
           start: matchStart,
           end: matchEnd,
           match: genericMatch[0],
-          processor: () => null, // Generic processor that just removes the content
+          processor: () => null,
           groups: [],
           children: [],
           depth: 0,
@@ -908,14 +951,13 @@ export class NotionAITool implements INodeType {
           listProcessor: undefined
         };
         allMatches.push(xmlNode);
-        processedRanges.push({ start: matchStart, end: matchEnd });
       }
     }
 
     // Sort by start position to maintain document order
     allMatches.sort((a, b) => a.start - b.start);
 
-    // Build parent-child relationships while preserving ordering
+    // Build parent-child relationships
     const rootNodes: XMLNode[] = [];
     const nodeStack: XMLNode[] = [];
 
@@ -938,7 +980,7 @@ export class NotionAITool implements INodeType {
         rootNodes.push(node);
       }
 
-      // Only push self-contained tags to stack (not self-closing)
+      // Push to stack for potential children
       if (!node.match.endsWith('/>') && node.match.includes('</')) {
         nodeStack.push(node);
       }
@@ -952,7 +994,37 @@ export class NotionAITool implements INodeType {
     const replacements = new Map<string, string>();
 
     const processNode = (node: XMLNode): string => {
-      // First, process all children depth-first
+      // For lists, use the original match content to preserve structure
+      // This is the only case where we skip child processing to avoid fragmentation
+      if (node.listProcessor && (node.tagName === 'ul' || node.tagName === 'ol')) {
+        try {
+          // Extract inner content directly from the original match
+          const tagName = node.tagName.toLowerCase();
+          const openTagRegex = new RegExp(`^<${tagName}[^>]*>`, 'i');
+          const closeTagRegex = new RegExp(`</${tagName}>$`, 'i');
+          
+          let innerContent = node.match;
+          const openMatch = node.match.match(openTagRegex);
+          const closeMatch = node.match.match(closeTagRegex);
+          
+          if (openMatch && closeMatch) {
+            const openTag = openMatch[0];
+            const closeTag = closeMatch[0];
+            const startIndex = openTag.length;
+            const endIndex = node.match.length - closeTag.length;
+            innerContent = node.match.substring(startIndex, endIndex);
+          }
+          
+          // Process the list with complete content
+          node.listProcessor(innerContent, blocks);
+          return ''; // Remove completely - no placeholder needed
+        } catch (error) {
+          console.warn(`Error processing list node ${node.tagName}:`, error);
+          return ''; // Remove even on error to prevent artifacts
+        }
+      }
+
+      // For non-list nodes, process children first (normal hierarchical processing)
       for (const child of node.children) {
         const childReplacement = processNode(child);
         replacements.set(child.id, childReplacement);
@@ -995,12 +1067,6 @@ export class NotionAITool implements INodeType {
 
       // Process this node with updated inner content
       try {
-        // Handle special list processors
-        if (node.listProcessor && (node.tagName === 'ul' || node.tagName === 'ol')) {
-          node.listProcessor(innerContent, blocks);
-          return `__BLOCK_${placeholderCounter.value++}__`;
-        }
-        
         // Use blockCreator to create the block
         const block = node.processor(...node.groups);
         
@@ -1008,10 +1074,10 @@ export class NotionAITool implements INodeType {
           blocks.push(block);
         }
         
-        return `__BLOCK_${placeholderCounter.value++}__`;
+        return ''; // Remove completely - no placeholder needed
       } catch (error) {
         console.warn(`Error processing XML node ${node.tagName}:`, error);
-        return node.match; // Return original if processing fails
+        return ''; // Remove even on error to prevent artifacts
       }
     };
 
@@ -1309,23 +1375,9 @@ export class NotionAITool implements INodeType {
         }
       },
 
-      // Standalone list items (only if not already processed in lists): <li>content</li>
-      {
-        regex: /<li\s*[^>]*>(.*?)<\/li>/gis,
-        blockCreator: (content: string) => {
-          if (content.trim()) {
-            // Convert HTML to markdown first, then parse to rich text
-            const markdownContent = NotionAITool.convertInlineHtmlToMarkdown(content.trim());
-            return {
-              type: 'bulleted_list_item',
-              bulleted_list_item: {
-                rich_text: NotionAITool.parseBasicMarkdown(markdownContent),
-              },
-            };
-          }
-          return null;
-        }
-      },
+      // REMOVED: Standalone <li> processor
+      // <li> tags should ONLY be processed within <ul>/<ol> contexts via the list processors above
+      // Having a standalone <li> processor causes XML fragments and double processing
 
 
       // Line breaks: <br/> or <br>
@@ -1362,10 +1414,7 @@ export class NotionAITool implements INodeType {
       // Step 3: Apply hierarchical replacements to content
       processedContent = NotionAITool.applyHierarchicalReplacements(processedContent, xmlTree, replacements);
       
-      // Step 4: Immediately replace all placeholders with empty strings since blocks are already in blocks array
-      processedContent = NotionAITool.cleanupAllPlaceholders(processedContent);
-      
-      // Step 5: Clean up any remaining HTML tags
+      // Step 4: Clean up any remaining HTML tags
       processedContent = NotionAITool.cleanupRemainingHtml(processedContent);
       
       if (DEBUG_ORDERING) {
@@ -1391,10 +1440,10 @@ export class NotionAITool implements INodeType {
                 if (block) {
                   blocks.push(block);
                 }
-                return `__BLOCK_${placeholderCounter++}__`;
+                return ''; // Remove completely - no placeholder needed
               } catch (error) {
                 console.warn('Error in fallback processor:', error);
-                return match;
+                return ''; // Remove even on error
               }
             },
             groups: match.slice(1)
@@ -1592,71 +1641,32 @@ export class NotionAITool implements INodeType {
     if (!processed) return '';
 
     try {
-      // Handle multiple segments separated by HTML block elements
-      const segments: string[] = [];
+      // First, aggressively remove any nested list tags and their content
+      // This prevents XML fragments from appearing in the final content
+      processed = processed.replace(/<[uo]l\s*[^>]*>[\s\S]*?<\/[uo]l>/gi, '');
       
-      // Split by block-level HTML elements like <p>, <div>, etc.
-      const blockElements = /<(p|div|h[1-6]|blockquote)\s*[^>]*>.*?<\/\1>/gis;
-      let lastIndex = 0;
-      let match;
+      // Remove any standalone list item tags that might be left behind
+      processed = processed.replace(/<\/?li\s*[^>]*>/gi, '');
       
-      const blockMatches = [];
-      while ((match = blockElements.exec(processed)) !== null) {
-        blockMatches.push({
-          start: match.index,
-          end: match.index + match[0].length,
-          content: match[0],
-          tag: match[1]
-        });
-      }
+      // Remove any other common list-related fragments
+      processed = processed.replace(/<\/?[uo]l\s*[^>]*>/gi, '');
       
-      // Sort matches by position
-      blockMatches.sort((a, b) => a.start - b.start);
+      // Simple cleanup - just remove remaining HTML tags and clean whitespace
+      // Avoid convertInlineHtmlToMarkdown to prevent duplication issues
+      const result = processed
+        .replace(/<[^>]*>/g, ' ')          // Remove any remaining HTML tags
+        .replace(/\s+/g, ' ')              // Clean up whitespace
+        .trim();
       
-      // Process text segments between block elements
-      blockMatches.forEach((blockMatch, index) => {
-        // Add text before this block element
-        if (blockMatch.start > lastIndex) {
-          const beforeText = processed.substring(lastIndex, blockMatch.start).trim();
-          if (beforeText) {
-            segments.push(NotionAITool.convertInlineHtmlToMarkdown(beforeText));
-          }
-        }
-        
-        // Process content inside block element
-        const innerContent = blockMatch.content.replace(new RegExp(`^<${blockMatch.tag}[^>]*>`, 'i'), '')
-                                                .replace(new RegExp(`</${blockMatch.tag}>$`, 'i'), '')
-                                                .trim();
-        if (innerContent) {
-          segments.push(NotionAITool.convertInlineHtmlToMarkdown(innerContent));
-        }
-        
-        lastIndex = blockMatch.end;
-      });
-      
-      // Add remaining text after last block element
-      if (lastIndex < processed.length) {
-        const remainingText = processed.substring(lastIndex).trim();
-        if (remainingText) {
-          segments.push(NotionAITool.convertInlineHtmlToMarkdown(remainingText));
-        }
-      }
-      
-      // If no block elements were found, process the whole content
-      if (blockMatches.length === 0) {
-        segments.push(NotionAITool.convertInlineHtmlToMarkdown(processed));
-      }
-      
-      // Join segments with space and clean up
-      const result = segments.filter(s => s.trim()).join(' ').trim();
-      
-      // Final cleanup of any remaining artifacts
-      return result.replace(/\s+/g, ' ').trim();
+      return result;
       
     } catch (error) {
       console.warn('Error processing nested HTML in list item:', error);
-      // Fallback: just remove HTML tags and return text
-      return processed.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      // Fallback: aggressively remove all HTML tags and return clean text
+      return processed
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
     }
   }
 
@@ -1699,80 +1709,33 @@ export class NotionAITool implements INodeType {
     return processed;
   }
 
-  // Helper function to process nested lists and flatten them for Notion
+  // Helper function to process lists using branch-based approach
+  // Each <ul> and <ol> represents a new branch that contains children
   static processNestedList(listContent: string, listType: 'bulleted_list_item' | 'numbered_list_item', blocks: IDataObject[]): void {
     try {
-      // More robust list item extraction using regex
-      const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-      let match;
+      // Process each <li> element as a potential branch point
+      const listItems = NotionAITool.extractListItemsWithBranching(listContent);
       
-      while ((match = liRegex.exec(listContent)) !== null) {
-        let itemContent = match[1].trim();
+      for (const item of listItems) {
+        if (!item.text && !item.children.length) continue;
         
-        if (!itemContent) continue;
-        
-        // Check if this item contains nested lists
-        const hasNestedList = /<[uo]l\s*[^>]*>/i.test(itemContent);
-        
-        if (hasNestedList) {
-          // Split content into parts: before nested list, nested list, after nested list
-          const parts = itemContent.split(/(<[uo]l\s*[^>]*>[\s\S]*?<\/[uo]l>)/i);
-          
-          // Process the main content (before nested list)
-          const mainContent = parts[0] ? parts[0].trim() : '';
-          if (mainContent) {
-            const cleanContent = NotionAITool.processNestedHtmlInListItem(mainContent);
-            if (cleanContent) {
-              blocks.push({
-                type: listType,
-                [listType]: {
-                  rich_text: NotionAITool.parseBasicMarkdown(cleanContent),
-                },
-              });
-            }
-          }
-          
-          // Process nested lists
-          for (let i = 1; i < parts.length; i += 2) {
-            const nestedListHtml = parts[i];
-            if (nestedListHtml) {
-              const nestedListMatch = nestedListHtml.match(/<([uo]l)\s*[^>]*>([\s\S]*?)<\/\1>/i);
-              if (nestedListMatch) {
-                const [, nestedListTag, nestedContent] = nestedListMatch;
-                const nestedListType = nestedListTag === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
-                
-                // Recursively process nested list
-                NotionAITool.processNestedList(nestedContent, nestedListType, blocks);
-              }
-            }
-          }
-          
-          // Process any content after nested lists
-          if (parts.length > 2) {
-            const afterContent = parts.slice(2).join('').trim();
-            if (afterContent) {
-              const cleanContent = NotionAITool.processNestedHtmlInListItem(afterContent);
-              if (cleanContent) {
-                blocks.push({
-                  type: listType,
-                  [listType]: {
-                    rich_text: NotionAITool.parseBasicMarkdown(cleanContent),
-                  },
-                });
-              }
-            }
-          }
-        } else {
-          // Simple item without nested lists
-          const cleanContent = NotionAITool.processNestedHtmlInListItem(itemContent);
-          if (cleanContent) {
+        // Create list item for the parent text (if any)
+        if (item.text && item.text.trim()) {
+          const cleanText = NotionAITool.processNestedHtmlInListItem(item.text);
+          if (cleanText) {
             blocks.push({
               type: listType,
               [listType]: {
-                rich_text: NotionAITool.parseBasicMarkdown(cleanContent),
+                rich_text: NotionAITool.parseBasicMarkdown(cleanText),
               },
             });
           }
+        }
+        
+        // Process each child branch
+        for (const child of item.children) {
+          const childListType = child.type === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
+          NotionAITool.processNestedList(child.content, childListType, blocks);
         }
       }
     } catch (error) {
@@ -1785,6 +1748,245 @@ export class NotionAITool implements INodeType {
         },
       });
     }
+  }
+
+  // Extract list items with proper branching structure - only process top-level <li> tags
+  static extractListItemsWithBranching(content: string): Array<{text: string, children: Array<{type: string, content: string}>}> {
+    const items: Array<{text: string, children: Array<{type: string, content: string}>}> = [];
+    
+    let pos = 0;
+    
+    while (pos < content.length) {
+      // Find next <li> tag at the current level
+      const liStart = content.indexOf('<li', pos);
+      if (liStart === -1) break;
+      
+      const liOpenEnd = content.indexOf('>', liStart);
+      if (liOpenEnd === -1) break;
+      
+      // Find the matching </li> using proper depth tracking for nested tags
+      let depth = 0;
+      let searchPos = liOpenEnd + 1; // Start after the opening <li> tag
+      let liEnd = -1;
+      
+      while (searchPos < content.length) {
+        const nextLiOpen = content.indexOf('<li', searchPos);
+        const nextLiClose = content.indexOf('</li>', searchPos);
+        
+        // Handle case where no more closing tags
+        if (nextLiClose === -1) break;
+        
+        // If there's an opening tag before the next closing tag
+        if (nextLiOpen !== -1 && nextLiOpen < nextLiClose) {
+          depth++;
+          searchPos = nextLiOpen + 3; // Move past '<li'
+        } else {
+          // Found a closing tag
+          if (depth === 0) {
+            // This is our matching closing tag
+            liEnd = nextLiClose;
+            break;
+          } else {
+            // This closing tag belongs to a nested li
+            depth--;
+            searchPos = nextLiClose + 5; // Move past '</li>'
+          }
+        }
+      }
+      
+      if (liEnd === -1) {
+        // No matching closing tag found
+        pos = liOpenEnd + 1;
+        continue;
+      }
+      
+      // Extract the content between <li> and </li>
+      const fullItemContent = content.substring(liOpenEnd + 1, liEnd);
+      if (!fullItemContent.trim()) {
+        pos = liEnd + 5;
+        continue;
+      }
+      
+      const item = { text: '', children: [] as Array<{type: string, content: string}> };
+      
+      // Process the content to separate text from nested lists
+      let contentPos = 0;
+      let textParts: string[] = [];
+      
+      while (contentPos < fullItemContent.length) {
+        // Look for the next nested list (ul or ol)
+        const nextUlStart = fullItemContent.indexOf('<ul', contentPos);
+        const nextOlStart = fullItemContent.indexOf('<ol', contentPos);
+        
+        let nextListStart = -1;
+        let listType = '';
+        
+        if (nextUlStart !== -1 && (nextOlStart === -1 || nextUlStart < nextOlStart)) {
+          nextListStart = nextUlStart;
+          listType = 'ul';
+        } else if (nextOlStart !== -1) {
+          nextListStart = nextOlStart;
+          listType = 'ol';
+        }
+        
+        if (nextListStart === -1) {
+          // No more nested lists - add remaining text
+          const remainingText = fullItemContent.substring(contentPos);
+          if (remainingText.trim()) {
+            textParts.push(remainingText);
+          }
+          break;
+        }
+        
+        // Add text before the nested list
+        const textBefore = fullItemContent.substring(contentPos, nextListStart);
+        if (textBefore.trim()) {
+          textParts.push(textBefore);
+        }
+        
+        // Find the end of this nested list
+        const listOpenEnd = fullItemContent.indexOf('>', nextListStart);
+        if (listOpenEnd === -1) {
+          // Malformed list tag
+          textParts.push(fullItemContent.substring(contentPos));
+          break;
+        }
+        
+        // Track depth to find the matching closing tag
+        let listDepth = 1;
+        let listSearchPos = listOpenEnd + 1;
+        let listEnd = -1;
+        
+        const openTag = `<${listType}`;
+        const closeTag = `</${listType}>`;
+        
+        while (listSearchPos < fullItemContent.length && listDepth > 0) {
+          const nextListOpen = fullItemContent.indexOf(openTag, listSearchPos);
+          const nextListClose = fullItemContent.indexOf(closeTag, listSearchPos);
+          
+          if (nextListClose === -1) break;
+          
+          if (nextListOpen !== -1 && nextListOpen < nextListClose) {
+            listDepth++;
+            listSearchPos = nextListOpen + openTag.length;
+          } else {
+            listDepth--;
+            if (listDepth === 0) {
+              listEnd = nextListClose + closeTag.length;
+              break;
+            }
+            listSearchPos = nextListClose + closeTag.length;
+          }
+        }
+        
+        if (listEnd !== -1) {
+          // Extract the content between <ul>/<ol> and </ul>/<ol>
+          const listContent = fullItemContent.substring(listOpenEnd + 1, listEnd - closeTag.length);
+          item.children.push({
+            type: listType,
+            content: listContent
+          });
+          contentPos = listEnd;
+        } else {
+          // Malformed nested list - treat remaining as text
+          textParts.push(fullItemContent.substring(contentPos));
+          break;
+        }
+      }
+      
+      // Combine all text parts and clean them
+      if (textParts.length > 0) {
+        const combinedText = textParts.join(' ').trim();
+        const cleanText = NotionAITool.processNestedHtmlInListItem(combinedText);
+        if (cleanText) {
+          item.text = cleanText;
+        }
+      }
+      
+      // Only add items that have either text or children
+      if (item.text.trim() || item.children.length > 0) {
+        items.push(item);
+      }
+      
+      pos = liEnd + 5; // Move past </li>
+    }
+    
+    return items;
+  }
+
+  // Helper function to properly extract list items handling nested <li> tags
+  static extractListItems(content: string): string[] {
+    const items: string[] = [];
+    
+    // Use a more robust regex approach that respects nesting
+    // This regex captures the complete <li>...</li> blocks including nested content
+    const liRegex = /<li[^>]*>((?:[^<]|<(?!\/li>))*?(?:<[uo]l[^>]*>[\s\S]*?<\/[uo]l>(?:[^<]|<(?!\/li>))*?)*?)<\/li>/gi;
+    
+    let match;
+    while ((match = liRegex.exec(content)) !== null) {
+      const itemContent = match[1];
+      if (itemContent && itemContent.trim()) {
+        items.push(itemContent.trim());
+      }
+    }
+    
+    // Fallback to the old depth-tracking method if regex fails
+    if (items.length === 0) {
+      let currentPos = 0;
+      
+      while (currentPos < content.length) {
+        // Find the next <li> opening tag
+        const liStart = content.indexOf('<li', currentPos);
+        if (liStart === -1) break;
+        
+        // Find the end of the opening tag
+        const openTagEnd = content.indexOf('>', liStart);
+        if (openTagEnd === -1) break;
+        
+        // Now find the matching closing </li> tag accounting for nesting
+        let depth = 1;
+        let pos = openTagEnd + 1;
+        let itemEnd = -1;
+        
+        while (pos < content.length && depth > 0) {
+          const nextLiOpen = content.indexOf('<li', pos);
+          const nextLiClose = content.indexOf('</li>', pos);
+          
+          // If no more closing tags, we're done
+          if (nextLiClose === -1) break;
+          
+          // If there's an opening tag before the next closing tag, increase depth
+          if (nextLiOpen !== -1 && nextLiOpen < nextLiClose) {
+            depth++;
+            pos = nextLiOpen + 3; // Move past '<li'
+          } else {
+            // Found a closing tag
+            depth--;
+            if (depth === 0) {
+              itemEnd = nextLiClose + 5; // Include the '</li>'
+              break;
+            } else {
+              pos = nextLiClose + 5; // Move past '</li>'
+            }
+          }
+        }
+        
+        if (itemEnd !== -1) {
+          // Extract the content between <li...> and </li>
+          const fullMatch = content.substring(liStart, itemEnd);
+          const innerMatch = fullMatch.match(/<li[^>]*>([\s\S]*)<\/li>$/);
+          if (innerMatch) {
+            items.push(innerMatch[1]);
+          }
+          currentPos = itemEnd;
+        } else {
+          // Malformed HTML, skip this tag
+          currentPos = openTagEnd + 1;
+        }
+      }
+    }
+    
+    return items;
   }
 
   // Helper function to get callout emoji based on type
