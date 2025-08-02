@@ -1719,23 +1719,41 @@ export class NotionAITool implements INodeType {
       for (const item of listItems) {
         if (!item.text && !item.children.length) continue;
         
-        // Create list item for the parent text (if any)
+        // Create list item block
+        const listItemBlock: IDataObject = {
+          type: listType,
+          [listType]: {
+            rich_text: [],
+          },
+        };
+        
+        // Add parent text if present
         if (item.text && item.text.trim()) {
           const cleanText = NotionAITool.processNestedHtmlInListItem(item.text);
           if (cleanText) {
-            blocks.push({
-              type: listType,
-              [listType]: {
-                rich_text: NotionAITool.parseBasicMarkdown(cleanText),
-              },
-            });
+            (listItemBlock[listType] as any).rich_text = NotionAITool.parseBasicMarkdown(cleanText);
           }
         }
         
-        // Process each child branch
-        for (const child of item.children) {
-          const childListType = child.type === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
-          NotionAITool.processNestedList(child.content, childListType, blocks);
+        // Process child branches and add them as nested children
+        if (item.children.length > 0) {
+          const childBlocks: IDataObject[] = [];
+          
+          for (const child of item.children) {
+            const childListType = child.type === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
+            NotionAITool.processNestedList(child.content, childListType, childBlocks);
+          }
+          
+          // Add children to the parent block
+          if (childBlocks.length > 0) {
+            (listItemBlock[listType] as any).children = childBlocks;
+          }
+        }
+        
+        // Only add the block if it has text or children
+        const listData = listItemBlock[listType] as any;
+        if ((listData.rich_text && listData.rich_text.length > 0) || listData.children) {
+          blocks.push(listItemBlock);
         }
       }
     } catch (error) {

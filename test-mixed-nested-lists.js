@@ -28,17 +28,27 @@ testCases.forEach((testCase, index) => {
   try {
     const blocks = NotionAITool.parseContentToBlocks(testCase.content);
     
-    // Extract text content from list item blocks
-    const listItems = blocks
-      .filter(block => block.type === 'bulleted_list_item' || block.type === 'numbered_list_item')
-      .map(block => {
-        const listType = block.type;
-        if (block[listType] && block[listType].rich_text && block[listType].rich_text[0]) {
-          return block[listType].rich_text[0].text?.content || block[listType].rich_text[0].plain_text || '';
+    // Extract text content from list item blocks recursively
+    const extractListItems = (blocks) => {
+      const items = [];
+      for (const block of blocks) {
+        if (block.type === 'bulleted_list_item' || block.type === 'numbered_list_item') {
+          const listType = block.type;
+          if (block[listType] && block[listType].rich_text && block[listType].rich_text[0]) {
+            const text = block[listType].rich_text[0].text?.content || block[listType].rich_text[0].plain_text || '';
+            if (text) items.push(text);
+          }
+          
+          // Recursively extract from children
+          if (block[listType] && block[listType].children) {
+            items.push(...extractListItems(block[listType].children));
+          }
         }
-        return '';
-      })
-      .filter(text => text.length > 0);
+      }
+      return items;
+    };
+    
+    const listItems = extractListItems(blocks);
     
     console.log(`Generated ${blocks.length} total blocks, ${listItems.length} list items:`);
     listItems.forEach((item, i) => {
