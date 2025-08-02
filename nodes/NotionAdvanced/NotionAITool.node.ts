@@ -1004,12 +1004,13 @@ export class NotionAITool implements INodeType {
         
         // For list processors, handle them specially
         if (xmlNode.listProcessor && (xmlNode.tagName === 'ul' || xmlNode.tagName === 'ol')) {
-          // Extract inner content
+          // Extract inner content and calculate offset
           const tagName = xmlNode.tagName.toLowerCase();
           const openTagRegex = new RegExp(`^<${tagName}[^>]*>`, 'i');
           const closeTagRegex = new RegExp(`</${tagName}>$`, 'i');
           
           let innerContent = xmlNode.match;
+          let contentStartOffset = 0;
           const openMatch = xmlNode.match.match(openTagRegex);
           const closeMatch = xmlNode.match.match(closeTagRegex);
           
@@ -1019,10 +1020,22 @@ export class NotionAITool implements INodeType {
             const startIndex = openTag.length;
             const endIndex = xmlNode.match.length - closeTag.length;
             innerContent = xmlNode.match.substring(startIndex, endIndex);
+            contentStartOffset = xmlNode.start + startIndex; // Absolute position where list content starts
           }
           
+          // Adjust child hierarchy node positions to be relative to list content
+          const adjustedChildNodes = childHierarchyNodes.map(child => ({
+            ...child,
+            metadata: {
+              ...child.metadata,
+              sourcePosition: child.metadata?.sourcePosition !== undefined
+                ? child.metadata.sourcePosition - contentStartOffset
+                : undefined
+            }
+          }));
+          
           // Build hierarchy structure for the list
-          const listHierarchy = NotionAITool.buildListHierarchy(innerContent, xmlNode.tagName === 'ul' ? 'bulleted_list_item' : 'numbered_list_item', childHierarchyNodes);
+          const listHierarchy = NotionAITool.buildListHierarchy(innerContent, xmlNode.tagName === 'ul' ? 'bulleted_list_item' : 'numbered_list_item', adjustedChildNodes);
           return listHierarchy;
         }
         
@@ -1753,8 +1766,8 @@ export class NotionAITool implements INodeType {
       const listItems = NotionAITool.extractListItemsWithBranching(listContent);
       const listItemHierarchyNodes: HierarchyNode[] = [];
       
-      // Map child hierarchy nodes to list items based on position
-      let childNodeIndex = 0;
+      // Map child hierarchy nodes to list items based on actual position in source XML
+      const listItemPositions = NotionAITool.getListItemPositions(listContent);
       
       for (let i = 0; i < listItems.length; i++) {
         const item = listItems[i];
@@ -1776,18 +1789,21 @@ export class NotionAITool implements INodeType {
           }
         }
         
-        // Collect child hierarchy nodes for this list item
+        // Collect child hierarchy nodes for this list item based on position mapping
         const itemChildNodes: HierarchyNode[] = [];
         
-        // Add child hierarchy nodes that belong to this list item
-        // For now, distribute them evenly - this could be improved with position mapping
-        const childrenPerItem = Math.floor(childHierarchyNodes.length / listItems.length);
-        const startIndex = i * childrenPerItem;
-        const endIndex = i === listItems.length - 1 ? childHierarchyNodes.length : startIndex + childrenPerItem;
-        
-        for (let j = startIndex; j < endIndex; j++) {
-          if (j < childHierarchyNodes.length) {
-            itemChildNodes.push(childHierarchyNodes[j]);
+        // Map child hierarchy nodes that belong to this specific list item
+        if (i < listItemPositions.length) {
+          const currentItemStart = listItemPositions[i].start;
+          const currentItemEnd = listItemPositions[i].end;
+          
+          for (const childNode of childHierarchyNodes) {
+            const childPosition = childNode.metadata?.sourcePosition;
+            if (childPosition !== undefined &&
+                childPosition >= currentItemStart &&
+                childPosition < currentItemEnd) {
+              itemChildNodes.push(childNode);
+            }
           }
         }
         
@@ -1842,6 +1858,58 @@ export class NotionAITool implements INodeType {
         metadata: { tagName: 'paragraph' }
       };
     }
+  }
+  
+  // Helper function to get position ranges for each list item in the content
+  static getListItemPositions(content: string): Array<{start: number, end: number}> {
+    const positions: Array<{start: number, end: number}> = [];
+    let pos = 0;
+    
+    while (pos < content.length) {
+      // Find next <li> tag
+      const liStart = content.indexOf('<li', pos);
+      if (liStart === -1) break;
+      
+      const liOpenEnd = content.indexOf('>', liStart);
+      if (liOpenEnd === -1) break;
+      
+      // Find the matching </li> using proper depth tracking
+      let depth = 0;
+      let searchPos = liOpenEnd + 1;
+      let liEnd = -1;
+      
+      while (searchPos < content.length) {
+        const nextLiOpen = content.indexOf('<li', searchPos);
+        const nextLiClose = content.indexOf('</li>', searchPos);
+        
+        if (nextLiClose === -1) break;
+        
+        if (nextLiOpen !== -1 && nextLiOpen < nextLiClose) {
+          depth++;
+          searchPos = nextLiOpen + 3;
+        } else {
+          if (depth === 0) {
+            liEnd = nextLiClose + 5; // Include the '</li>'
+            break;
+          } else {
+            depth--;
+            searchPos = nextLiClose + 5;
+          }
+        }
+      }
+      
+      if (liEnd !== -1) {
+        positions.push({
+          start: liStart,
+          end: liEnd
+        });
+        pos = liEnd;
+      } else {
+        pos = liOpenEnd + 1;
+      }
+    }
+    
+    return positions;
   }
   
   // Helper function to map child blocks to specific list items (legacy support)
