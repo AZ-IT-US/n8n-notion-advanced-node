@@ -1390,20 +1390,30 @@ export class NotionAITool implements INodeType {
     return decoded;
   }
 
-  // Cleanup function to remove remaining HTML tags and XML_BLOCK artifacts
+  // Cleanup function to remove remaining HTML tags and placeholder artifacts
   static cleanupRemainingHtml(content: string, placeholderPrefix?: string): string {
     let cleaned = content;
     
-    // Simplified placeholder cleanup - use one consistent pattern
+    // Clean up sequential placeholder format: __BLOCK_N__
+    const sequentialPlaceholderPatterns = [
+      /__BLOCK_\d+__/g,           // Standard format: __BLOCK_1__, __BLOCK_2__, etc.
+      /\b\d+__\b/g,               // Remnants like "7__"
+      /__\d+__/g,                 // Alternative format: __1__, __2__, etc.
+    ];
+    
+    sequentialPlaceholderPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+    
+    // Legacy placeholder cleanup (for backwards compatibility)
     if (placeholderPrefix) {
-      // Clean up our specific placeholder format: __XML_{uuid8}_{number}__
       const escapedPrefix = placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const placeholderPattern = new RegExp(`${escapedPrefix}\\d+__`, 'g');
       cleaned = cleaned.replace(placeholderPattern, '');
     }
     
-    // Comprehensive fallback cleanup for all possible placeholder formats
-    const placeholderPatterns = [
+    // Clean up old UUID-based placeholders (for backwards compatibility)
+    const legacyPlaceholderPatterns = [
       /__XML_[a-f0-9]{8}_\d+__/g,           // Standard format: __XML_abc12345_1__
       /\b[A-Z]{2}[a-z0-9]{8,12}_+\b/g,      // Variations like "MLb82d670450__"
       /\b[A-Za-z]{2,4}[a-f0-9]{6,12}_+\b/g, // More flexible pattern matching
@@ -1411,22 +1421,12 @@ export class NotionAITool implements INodeType {
       /[a-f0-9]{8,12}_\d+__/g,              // Without prefix
     ];
     
-    placeholderPatterns.forEach(pattern => {
+    legacyPlaceholderPatterns.forEach(pattern => {
       cleaned = cleaned.replace(pattern, '');
     });
     
-    // Remove entire lines containing XML content to prevent double processing
-    const xmlContentLines = [
-      /^.*<[^>]+>.*$/gm,                           // Any line with XML/HTML tags
-      /^.*&lt;[^&]+&gt;.*$/gm,                    // HTML-encoded tags
-      /^.*<(h[1-6]|p|ul|ol|li|strong|em|b|i|code|blockquote|callout|todo|image|embed|bookmark|equation|toggle|divider|quote|pre)\b[^>]*>.*$/gim, // Specific XML content
-    ];
-
-    xmlContentLines.forEach(pattern => {
-      cleaned = cleaned.replace(pattern, '');
-    });
-    
-    // Remove common HTML tags that might be left behind
+    // Remove common HTML tags that might be left behind AFTER processing
+    // Note: We don't remove entire lines here - only clean up leftover tags
     const htmlTagsToRemove = [
       /<\/?ul\s*[^>]*>/gi,
       /<\/?ol\s*[^>]*>/gi,
