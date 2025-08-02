@@ -1701,10 +1701,11 @@ export class NotionAITool implements INodeType {
       // Remove any other common list-related fragments
       processed = processed.replace(/<\/?[uo]l\s*[^>]*>/gi, '');
       
-      // Simple cleanup - just remove remaining HTML tags and clean whitespace
-      // Avoid convertInlineHtmlToMarkdown to prevent duplication issues
+      // Convert inline HTML formatting to markdown BEFORE removing tags
+      processed = NotionAITool.convertInlineHtmlToMarkdown(processed);
+      
+      // Final cleanup of any remaining unhandled tags
       const result = processed
-        .replace(/<[^>]*>/g, ' ')          // Remove any remaining HTML tags
         .replace(/\s+/g, ' ')              // Clean up whitespace
         .trim();
       
@@ -1712,11 +1713,16 @@ export class NotionAITool implements INodeType {
       
     } catch (error) {
       console.warn('Error processing nested HTML in list item:', error);
-      // Fallback: aggressively remove all HTML tags and return clean text
-      return processed
-        .replace(/<[^>]*>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      // Fallback: convert inline HTML then remove any remaining tags
+      try {
+        const fallback = NotionAITool.convertInlineHtmlToMarkdown(processed);
+        return fallback.replace(/\s+/g, ' ').trim();
+      } catch (fallbackError) {
+        return processed
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
     }
   }
 
@@ -2079,14 +2085,35 @@ export class NotionAITool implements INodeType {
       
       const item = { text: '', children: [] as Array<{type: string, content: string}> };
       
-      // Process the content to separate text from nested lists
+      // STEP 1: Remove child block XML from content to get clean parent text
+      let parentTextContent = fullItemContent;
+      
+      // List of XML tags that create child blocks (these should be removed from parent text)
+      const childBlockTags = [
+        'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'blockquote', 'quote', 'callout', 'code', 'pre',
+        'todo', 'toggle', 'image', 'embed', 'bookmark',
+        'equation', 'divider'
+      ];
+      
+      // Remove child block XML from parent text
+      childBlockTags.forEach(tag => {
+        // Remove both self-closing and paired tags
+        const selfClosingRegex = new RegExp(`<${tag}[^>]*\\/>`, 'gis');
+        const pairedRegex = new RegExp(`<${tag}[^>]*>.*?<\\/${tag}>`, 'gis');
+        
+        parentTextContent = parentTextContent.replace(pairedRegex, '');
+        parentTextContent = parentTextContent.replace(selfClosingRegex, '');
+      });
+      
+      // STEP 2: Process the content to separate remaining text from nested lists
       let contentPos = 0;
       let textParts: string[] = [];
       
-      while (contentPos < fullItemContent.length) {
+      while (contentPos < parentTextContent.length) {
         // Look for the next nested list (ul or ol)
-        const nextUlStart = fullItemContent.indexOf('<ul', contentPos);
-        const nextOlStart = fullItemContent.indexOf('<ol', contentPos);
+        const nextUlStart = parentTextContent.indexOf('<ul', contentPos);
+        const nextOlStart = parentTextContent.indexOf('<ol', contentPos);
         
         let nextListStart = -1;
         let listType = '';
@@ -2101,7 +2128,7 @@ export class NotionAITool implements INodeType {
         
         if (nextListStart === -1) {
           // No more nested lists - add remaining text
-          const remainingText = fullItemContent.substring(contentPos);
+          const remainingText = parentTextContent.substring(contentPos);
           if (remainingText.trim()) {
             textParts.push(remainingText);
           }
@@ -2109,16 +2136,16 @@ export class NotionAITool implements INodeType {
         }
         
         // Add text before the nested list
-        const textBefore = fullItemContent.substring(contentPos, nextListStart);
+        const textBefore = parentTextContent.substring(contentPos, nextListStart);
         if (textBefore.trim()) {
           textParts.push(textBefore);
         }
         
         // Find the end of this nested list
-        const listOpenEnd = fullItemContent.indexOf('>', nextListStart);
+        const listOpenEnd = parentTextContent.indexOf('>', nextListStart);
         if (listOpenEnd === -1) {
           // Malformed list tag
-          textParts.push(fullItemContent.substring(contentPos));
+          textParts.push(parentTextContent.substring(contentPos));
           break;
         }
         
@@ -2130,9 +2157,9 @@ export class NotionAITool implements INodeType {
         const openTag = `<${listType}`;
         const closeTag = `</${listType}>`;
         
-        while (listSearchPos < fullItemContent.length && listDepth > 0) {
-          const nextListOpen = fullItemContent.indexOf(openTag, listSearchPos);
-          const nextListClose = fullItemContent.indexOf(closeTag, listSearchPos);
+        while (listSearchPos < parentTextContent.length && listDepth > 0) {
+          const nextListOpen = parentTextContent.indexOf(openTag, listSearchPos);
+          const nextListClose = parentTextContent.indexOf(closeTag, listSearchPos);
           
           if (nextListClose === -1) break;
           
@@ -2150,7 +2177,8 @@ export class NotionAITool implements INodeType {
         }
         
         if (listEnd !== -1) {
-          // Extract the content between <ul>/<ol> and </ul>/<ol>
+          // Extract the content between <ul>/<ol> and </ul>/<ol> from ORIGINAL content
+          // (not parentTextContent which has child blocks removed)
           const listContent = fullItemContent.substring(listOpenEnd + 1, listEnd - closeTag.length);
           item.children.push({
             type: listType,
@@ -2159,7 +2187,7 @@ export class NotionAITool implements INodeType {
           contentPos = listEnd;
         } else {
           // Malformed nested list - treat remaining as text
-          textParts.push(fullItemContent.substring(contentPos));
+          textParts.push(parentTextContent.substring(contentPos));
           break;
         }
       }
