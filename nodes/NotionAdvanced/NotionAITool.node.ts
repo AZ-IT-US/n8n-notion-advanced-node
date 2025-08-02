@@ -1274,31 +1274,6 @@ export class NotionAITool implements INodeType {
         }
       },
 
-      // Strong/Bold: <strong>content</strong> or <b>content</b> (only as standalone)
-      {
-        regex: /(?:^|>|\s)<(strong|b)>(.*?)<\/(strong|b)>(?=<|$|\s)/gis,
-        blockCreator: (tag: string, content: string) => {
-          return {
-            type: 'paragraph',
-            paragraph: {
-              rich_text: NotionAITool.parseBasicMarkdown(`**${content.trim()}**`),
-            },
-          };
-        }
-      },
-
-      // Emphasis/Italic: <em>content</em> or <i>content</i> (only as standalone)
-      {
-        regex: /(?:^|>|\s)<(em|i)>(.*?)<\/(em|i)>(?=<|$|\s)/gis,
-        blockCreator: (tag: string, content: string) => {
-          return {
-            type: 'paragraph',
-            paragraph: {
-              rich_text: NotionAITool.parseBasicMarkdown(`*${content.trim()}*`),
-            },
-          };
-        }
-      },
 
       // Line breaks: <br/> or <br>
       {
