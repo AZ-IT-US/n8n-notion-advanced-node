@@ -1311,7 +1311,10 @@ export class NotionAITool implements INodeType {
       // Step 3: Apply hierarchical replacements to content
       processedContent = NotionAITool.applyHierarchicalReplacements(processedContent, xmlTree, replacements);
       
-      // Step 4: Clean up any remaining HTML tags
+      // Step 4: Immediately replace all placeholders with empty strings since blocks are already in blocks array
+      processedContent = NotionAITool.cleanupAllPlaceholders(processedContent);
+      
+      // Step 5: Clean up any remaining HTML tags
       processedContent = NotionAITool.cleanupRemainingHtml(processedContent);
       
       if (DEBUG_ORDERING) {
@@ -1368,6 +1371,65 @@ export class NotionAITool implements INodeType {
     }
 
     return processedContent;
+  }
+
+  // Helper function to immediately clean up all placeholders after hierarchical processing
+  static cleanupAllPlaceholders(content: string): string {
+    let cleaned = content;
+    
+    // Since blocks have already been added to the blocks array during hierarchical processing,
+    // we can safely remove all placeholders immediately to prevent partial replacement issues
+    
+    // Primary sequential placeholder patterns: __BLOCK_N__
+    const sequentialPatterns = [
+      /__BLOCK_\d+__/g,                    // Standard format: __BLOCK_1__, __BLOCK_2__, etc.
+      /\b__BLOCK_\d+__\b/g,                // Word boundary version
+      /__BL\w*_\d+__/g,                    // Partial matches like __BL..._N__
+      /\b\w*OCK\d+_\b/g,                   // Catch patterns like "OCK23_"
+      /\b\w*CK\d+_\b/g,                    // Catch patterns like "CK23_"
+      /\b\w*K\d+_\b/g,                     // Catch patterns like "K23_"
+      /\b\d+__\b/g,                        // Remnants like "23__"
+      /__\d+__/g,                          // Alternative format: __1__, __2__, etc.
+      /__\w*\d+_*/g,                       // Any underscore-digit patterns
+      /\b[A-Z]*OCK\d+_*\b/g,               // Case variations of OCK patterns
+    ];
+    
+    // Apply all sequential cleanup patterns
+    sequentialPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+    
+    // Legacy UUID-based placeholder cleanup (for backwards compatibility)
+    const legacyPatterns = [
+      /__XML_[a-f0-9]{8}_\d+__/g,           // Standard format: __XML_abc12345_1__
+      /\b[A-Z]{2}[a-z0-9]{8,12}_+\b/g,      // Variations like "MLb82d670450__"
+      /\b[A-Za-z]{2,4}[a-f0-9]{6,12}_+\b/g, // More flexible pattern matching
+      /_[a-f0-9]{8,12}_\d+_*/g,             // Underscore variations
+      /[a-f0-9]{8,12}_\d+__/g,              // Without prefix
+    ];
+    
+    // Apply legacy cleanup patterns
+    legacyPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+    
+    // Additional aggressive patterns to catch any partial remnants
+    const aggressivePatterns = [
+      /\b[A-Z]{1,4}\d{1,3}_+\b/g,           // Patterns like "OCK23_", "CK23_", "K23_"
+      /\b[A-Za-z]{1,6}\d{1,4}_+\b/g,        // More general partial patterns
+      /_{2,}\d+_{0,2}/g,                    // Multiple underscores with digits
+      /__+[A-Za-z]*\d+_*/g,                 // Underscore patterns with letters and digits
+    ];
+    
+    // Apply aggressive cleanup patterns as final pass
+    aggressivePatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
+    
+    // Remove any double spaces created by removals
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+    
+    return cleaned;
   }
 
   // Helper function to decode HTML entities
