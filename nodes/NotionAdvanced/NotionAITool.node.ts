@@ -57,6 +57,17 @@ interface XMLNode {
   listProcessor?: (content: string, blocks: IDataObject[]) => void;
 }
 
+// Interface for object-based JSON hierarchy structure
+interface HierarchyNode {
+  block: IDataObject;
+  children: HierarchyNode[];
+  metadata?: {
+    sourcePosition?: number;
+    xmlNodeId?: string;
+    tagName?: string;
+  };
+}
+
 // Interface for processing results
 interface ProcessingResult {
   blocks: IDataObject[];
@@ -852,71 +863,58 @@ export class NotionAITool implements INodeType {
   static buildXMLTree(content: string, tagProcessors: any[]): XMLNode[] {
     const allMatches: XMLNode[] = [];
     
-    // Step 1: Use depth-aware parsing for each tag processor
+    // Step 1: Use regex-based parsing to properly extract capture groups, then enhance with depth-aware structure
     tagProcessors.forEach(({ regex, blockCreator, listProcessor }) => {
-      const tagPattern = regex.source.match(/<(\w+)/)?.[1];
-      if (!tagPattern) return;
+      const globalRegex = new RegExp(regex.source, 'gis');
+      let match;
       
-      // Find all opening tags of this type
-      let pos = 0;
-      while (pos < content.length) {
-        const openTagStart = content.indexOf(`<${tagPattern}`, pos);
-        if (openTagStart === -1) break;
+      while ((match = globalRegex.exec(content)) !== null) {
+        const fullMatch = match[0];
+        const matchStart = match.index;
+        const matchEnd = match.index + fullMatch.length;
         
-        const openTagEnd = content.indexOf('>', openTagStart);
-        if (openTagEnd === -1) break;
+        // Extract tag name for identification
+        const tagPattern = regex.source.match(/<(\w+)/)?.[1] || 'unknown';
         
-        // Find matching closing tag using depth tracking
-        let depth = 1;
-        let searchPos = openTagEnd + 1;
-        let closeTagStart = -1;
-        
-        const openPattern = `<${tagPattern}`;
-        const closePattern = `</${tagPattern}>`;
-        
-        while (searchPos < content.length && depth > 0) {
-          const nextOpen = content.indexOf(openPattern, searchPos);
-          const nextClose = content.indexOf(closePattern, searchPos);
+        // Extract inner content (between opening and closing tags)
+        let innerContent = '';
+        try {
+          const openTagRegex = new RegExp(`^<${tagPattern}[^>]*>`, 'i');
+          const closeTagRegex = new RegExp(`</${tagPattern}>$`, 'i');
           
-          if (nextClose === -1) break;
+          const openMatch = fullMatch.match(openTagRegex);
+          const closeMatch = fullMatch.match(closeTagRegex);
           
-          if (nextOpen !== -1 && nextOpen < nextClose) {
-            // Found nested opening tag
-            depth++;
-            searchPos = nextOpen + openPattern.length;
+          if (openMatch && closeMatch) {
+            const openTag = openMatch[0];
+            const closeTag = closeMatch[0];
+            const startIndex = openTag.length;
+            const endIndex = fullMatch.length - closeTag.length;
+            innerContent = fullMatch.substring(startIndex, endIndex);
           } else {
-            // Found closing tag
-            depth--;
-            if (depth === 0) {
-              closeTagStart = nextClose;
-              break;
-            }
-            searchPos = nextClose + closePattern.length;
+            // Fallback for self-closing or malformed tags
+            innerContent = fullMatch.replace(/^<[^>]*>/, '').replace(/<\/[^>]*>$/, '');
           }
+        } catch (error) {
+          console.warn(`Error extracting inner content for ${tagPattern}:`, error);
+          innerContent = fullMatch;
         }
         
-        if (closeTagStart !== -1) {
-          const fullMatch = content.substring(openTagStart, closeTagStart + closePattern.length);
-          const innerContent = content.substring(openTagEnd + 1, closeTagStart);
-          
-          const xmlNode = {
-            id: `${tagPattern}_${openTagStart}_${Date.now()}_${Math.random()}`,
-            tagName: tagPattern,
-            start: openTagStart,
-            end: closeTagStart + closePattern.length,
-            match: fullMatch,
-            processor: blockCreator,
-            groups: [innerContent], // For list processors, group[0] is the inner content
-            children: [],
-            depth: 0,
-            innerContent,
-            replacement: undefined,
-            listProcessor
-          };
-          allMatches.push(xmlNode);
-        }
-        
-        pos = openTagEnd + 1;
+        const xmlNode = {
+          id: `${tagPattern}_${matchStart}_${Date.now()}_${Math.random()}`,
+          tagName: tagPattern,
+          start: matchStart,
+          end: matchEnd,
+          match: fullMatch,
+          processor: blockCreator,
+          groups: match.slice(1), // Proper regex capture groups (excluding full match)
+          children: [],
+          depth: 0,
+          innerContent,
+          replacement: undefined,
+          listProcessor
+        };
+        allMatches.push(xmlNode);
       }
     });
 
@@ -989,104 +987,143 @@ export class NotionAITool implements INodeType {
     return rootNodes;
   }
 
-  // Process XML tree depth-first (children before parents)
-  static processXMLTreeDepthFirst(nodes: XMLNode[], blocks: IDataObject[], placeholderCounter: { value: number }): Map<string, string> {
-    const replacements = new Map<string, string>();
-
-    const processNode = (node: XMLNode): string => {
-      // For lists, use the original match content to preserve structure
-      // This is the only case where we skip child processing to avoid fragmentation
-      if (node.listProcessor && (node.tagName === 'ul' || node.tagName === 'ol')) {
-        try {
-          // Extract inner content directly from the original match
-          const tagName = node.tagName.toLowerCase();
+  // Convert XML tree to HierarchyNode structure for cleaner processing
+  static xmlTreeToHierarchy(nodes: XMLNode[]): HierarchyNode[] {
+    const hierarchyNodes: HierarchyNode[] = [];
+    
+    const processNode = (xmlNode: XMLNode): HierarchyNode | null => {
+      try {
+        // Process children first
+        const childHierarchyNodes: HierarchyNode[] = [];
+        for (const child of xmlNode.children) {
+          const childHierarchy = processNode(child);
+          if (childHierarchy) {
+            childHierarchyNodes.push(childHierarchy);
+          }
+        }
+        
+        // For list processors, handle them specially
+        if (xmlNode.listProcessor && (xmlNode.tagName === 'ul' || xmlNode.tagName === 'ol')) {
+          // Extract inner content
+          const tagName = xmlNode.tagName.toLowerCase();
           const openTagRegex = new RegExp(`^<${tagName}[^>]*>`, 'i');
           const closeTagRegex = new RegExp(`</${tagName}>$`, 'i');
           
-          let innerContent = node.match;
-          const openMatch = node.match.match(openTagRegex);
-          const closeMatch = node.match.match(closeTagRegex);
+          let innerContent = xmlNode.match;
+          const openMatch = xmlNode.match.match(openTagRegex);
+          const closeMatch = xmlNode.match.match(closeTagRegex);
           
           if (openMatch && closeMatch) {
             const openTag = openMatch[0];
             const closeTag = closeMatch[0];
             const startIndex = openTag.length;
-            const endIndex = node.match.length - closeTag.length;
-            innerContent = node.match.substring(startIndex, endIndex);
+            const endIndex = xmlNode.match.length - closeTag.length;
+            innerContent = xmlNode.match.substring(startIndex, endIndex);
           }
           
-          // Process the list with complete content
-          node.listProcessor(innerContent, blocks);
-          return ''; // Remove completely - no placeholder needed
-        } catch (error) {
-          console.warn(`Error processing list node ${node.tagName}:`, error);
-          return ''; // Remove even on error to prevent artifacts
-        }
-      }
-
-      // For non-list nodes, process children first (normal hierarchical processing)
-      for (const child of node.children) {
-        const childReplacement = processNode(child);
-        replacements.set(child.id, childReplacement);
-      }
-
-      // Extract inner content (content between opening and closing tags)
-      let innerContent = '';
-      
-      try {
-        // More robust inner content extraction
-        const tagName = node.tagName.toLowerCase();
-        const openTagRegex = new RegExp(`^<${tagName}[^>]*>`, 'i');
-        const closeTagRegex = new RegExp(`</${tagName}>$`, 'i');
-        
-        const openMatch = node.match.match(openTagRegex);
-        const closeMatch = node.match.match(closeTagRegex);
-        
-        if (openMatch && closeMatch) {
-          const openTag = openMatch[0];
-          const closeTag = closeMatch[0];
-          const startIndex = openTag.length;
-          const endIndex = node.match.length - closeTag.length;
-          innerContent = node.match.substring(startIndex, endIndex);
-        } else {
-          // Fallback for self-closing or malformed tags
-          innerContent = node.match.replace(/^<[^>]*>/, '').replace(/<\/[^>]*>$/, '');
+          // Build hierarchy structure for the list
+          const listHierarchy = NotionAITool.buildListHierarchy(innerContent, xmlNode.tagName === 'ul' ? 'bulleted_list_item' : 'numbered_list_item', childHierarchyNodes);
+          return listHierarchy;
         }
         
-        // Replace child nodes in inner content with their processed content
-        for (const child of node.children) {
-          const childReplacement = replacements.get(child.id) || '';
-          if (childReplacement !== undefined && innerContent.includes(child.match)) {
-            innerContent = innerContent.replace(child.match, childReplacement);
+        // For regular nodes, create block and attach children
+        const block = xmlNode.processor(...xmlNode.groups);
+        if (!block) return null;
+        
+        const hierarchyNode: HierarchyNode = {
+          block,
+          children: childHierarchyNodes,
+          metadata: {
+            sourcePosition: xmlNode.start,
+            xmlNodeId: xmlNode.id,
+            tagName: xmlNode.tagName
           }
-        }
-      } catch (error) {
-        console.warn(`Error extracting inner content for ${node.tagName}:`, error);
-        innerContent = node.match;
-      }
-
-      // Process this node with updated inner content
-      try {
-        // Use blockCreator to create the block
-        const block = node.processor(...node.groups);
+        };
         
-        if (block) {
-          blocks.push(block);
-        }
-        
-        return ''; // Remove completely - no placeholder needed
+        return hierarchyNode;
       } catch (error) {
-        console.warn(`Error processing XML node ${node.tagName}:`, error);
-        return ''; // Remove even on error to prevent artifacts
+        console.warn(`Error processing XML node ${xmlNode.tagName}:`, error);
+        return null;
       }
     };
-
+    
     // Process all root nodes
     for (const rootNode of nodes) {
-      const replacement = processNode(rootNode);
-      replacements.set(rootNode.id, replacement);
+      const hierarchyNode = processNode(rootNode);
+      if (hierarchyNode) {
+        if (hierarchyNode.block) {
+          hierarchyNodes.push(hierarchyNode);
+        } else if (hierarchyNode.children.length > 0) {
+          // If it's a list container, add its children directly
+          hierarchyNodes.push(...hierarchyNode.children);
+        }
+      }
     }
-
+    
+    return hierarchyNodes;
+  }
+  
+  // Convert HierarchyNode structure to final Notion blocks
+  static hierarchyToNotionBlocks(hierarchy: HierarchyNode[]): IDataObject[] {
+    return hierarchy.map(node => {
+      const block = { ...node.block };
+      
+      if (node.children.length > 0) {
+        const blockData = block[block.type as string] as any;
+        if (blockData && typeof blockData === 'object') {
+          // Check if this block type can have children
+          const childSupportingTypes = ['bulleted_list_item', 'numbered_list_item', 'toggle', 'quote', 'callout'];
+          if (childSupportingTypes.includes(block.type as string)) {
+            blockData.children = NotionAITool.hierarchyToNotionBlocks(node.children);
+          }
+        }
+      }
+      
+      return block;
+    });
+  }
+  
+  // Process XML tree using the new hierarchy system
+  static processXMLTreeDepthFirst(nodes: XMLNode[], blocks: IDataObject[], placeholderCounter: { value: number }): Map<string, string> {
+    const replacements = new Map<string, string>();
+    
+    try {
+      // Convert XML tree to hierarchy structure
+      const hierarchy = NotionAITool.xmlTreeToHierarchy(nodes);
+      
+      // Convert hierarchy to final Notion blocks
+      const finalBlocks = NotionAITool.hierarchyToNotionBlocks(hierarchy);
+      
+      // Add all blocks to the output
+      blocks.push(...finalBlocks);
+      
+      // Mark all nodes as processed (empty replacement)
+      const markProcessed = (nodeList: XMLNode[]) => {
+        nodeList.forEach(node => {
+          replacements.set(node.id, '');
+          markProcessed(node.children);
+        });
+      };
+      markProcessed(nodes);
+      
+    } catch (error) {
+      console.warn('Error in hierarchy processing, falling back to legacy processing:', error);
+      
+      // Fallback to simple processing if hierarchy fails
+      nodes.forEach(node => {
+        try {
+          const block = node.processor(...node.groups);
+          if (block) {
+            blocks.push(block);
+          }
+          replacements.set(node.id, '');
+        } catch (nodeError) {
+          console.warn(`Error processing fallback node ${node.tagName}:`, nodeError);
+          replacements.set(node.id, '');
+        }
+      });
+    }
+    
     return replacements;
   }
 
@@ -1709,14 +1746,18 @@ export class NotionAITool implements INodeType {
     return processed;
   }
 
-  // Helper function to process lists using branch-based approach
-  // Each <ul> and <ol> represents a new branch that contains children
-  static processNestedList(listContent: string, listType: 'bulleted_list_item' | 'numbered_list_item', blocks: IDataObject[]): void {
+  // Build hierarchy structure for lists using HierarchyNode approach
+  static buildListHierarchy(listContent: string, listType: 'bulleted_list_item' | 'numbered_list_item', childHierarchyNodes: HierarchyNode[]): HierarchyNode | null {
     try {
-      // Process each <li> element as a potential branch point
+      // Process each <li> element and build hierarchy
       const listItems = NotionAITool.extractListItemsWithBranching(listContent);
+      const listItemHierarchyNodes: HierarchyNode[] = [];
       
-      for (const item of listItems) {
+      // Map child hierarchy nodes to list items based on position
+      let childNodeIndex = 0;
+      
+      for (let i = 0; i < listItems.length; i++) {
+        const item = listItems[i];
         if (!item.text && !item.children.length) continue;
         
         // Create list item block
@@ -1735,19 +1776,157 @@ export class NotionAITool implements INodeType {
           }
         }
         
-        // Process child branches and add them as nested children
+        // Collect child hierarchy nodes for this list item
+        const itemChildNodes: HierarchyNode[] = [];
+        
+        // Add child hierarchy nodes that belong to this list item
+        // For now, distribute them evenly - this could be improved with position mapping
+        const childrenPerItem = Math.floor(childHierarchyNodes.length / listItems.length);
+        const startIndex = i * childrenPerItem;
+        const endIndex = i === listItems.length - 1 ? childHierarchyNodes.length : startIndex + childrenPerItem;
+        
+        for (let j = startIndex; j < endIndex; j++) {
+          if (j < childHierarchyNodes.length) {
+            itemChildNodes.push(childHierarchyNodes[j]);
+          }
+        }
+        
+        // Process nested list children (traditional nested lists)
         if (item.children.length > 0) {
-          const childBlocks: IDataObject[] = [];
-          
           for (const child of item.children) {
             const childListType = child.type === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
-            NotionAITool.processNestedList(child.content, childListType, childBlocks);
+            const childListHierarchy = NotionAITool.buildListHierarchy(child.content, childListType, []);
+            if (childListHierarchy && childListHierarchy.children) {
+              itemChildNodes.push(...childListHierarchy.children);
+            }
           }
-          
-          // Add children to the parent block
-          if (childBlocks.length > 0) {
-            (listItemBlock[listType] as any).children = childBlocks;
+        }
+        
+        // Create hierarchy node for this list item
+        const listItemHierarchyNode: HierarchyNode = {
+          block: listItemBlock,
+          children: itemChildNodes,
+          metadata: {
+            sourcePosition: i,
+            tagName: listType
           }
+        };
+        
+        // Only add if it has content or children
+        const listData = listItemBlock[listType] as any;
+        if ((listData.rich_text && listData.rich_text.length > 0) || itemChildNodes.length > 0) {
+          listItemHierarchyNodes.push(listItemHierarchyNode);
+        }
+      }
+      
+      // Return a container that holds all list items
+      return {
+        block: null as any, // No container block needed
+        children: listItemHierarchyNodes,
+        metadata: {
+          tagName: listType === 'bulleted_list_item' ? 'ul' : 'ol'
+        }
+      };
+      
+    } catch (error) {
+      console.warn('Error building list hierarchy:', error);
+      // Fallback: create a simple text block
+      return {
+        block: {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [{ type: 'text', text: { content: 'Error processing list content' } }],
+          },
+        },
+        children: [],
+        metadata: { tagName: 'paragraph' }
+      };
+    }
+  }
+  
+  // Helper function to map child blocks to specific list items (legacy support)
+  static mapChildBlocksToListItems(listContent: string, childBlocks: IDataObject[], childNodes: XMLNode[]): Map<number, IDataObject[]> {
+    const listItemChildBlocks = new Map<number, IDataObject[]>();
+    
+    // Find all <li> positions in the content
+    const liPositions: number[] = [];
+    let pos = 0;
+    while (pos < listContent.length) {
+      const liStart = listContent.indexOf('<li', pos);
+      if (liStart === -1) break;
+      liPositions.push(liStart);
+      pos = liStart + 3;
+    }
+    
+    // Map child nodes to their corresponding list items
+    childNodes.forEach((childNode, index) => {
+      // Find which <li> this child node belongs to
+      let liIndex = -1;
+      for (let i = 0; i < liPositions.length; i++) {
+        const liStart = liPositions[i];
+        const nextLiStart = i + 1 < liPositions.length ? liPositions[i + 1] : listContent.length;
+        
+        if (childNode.start >= liStart && childNode.start < nextLiStart) {
+          liIndex = i;
+          break;
+        }
+      }
+      
+      if (liIndex >= 0 && index < childBlocks.length) {
+        if (!listItemChildBlocks.has(liIndex)) {
+          listItemChildBlocks.set(liIndex, []);
+        }
+        listItemChildBlocks.get(liIndex)!.push(childBlocks[index]);
+      }
+    });
+    
+    return listItemChildBlocks;
+  }
+  
+  // Enhanced list processor that handles child blocks (legacy support)
+  static processNestedListWithChildBlocks(listContent: string, listType: 'bulleted_list_item' | 'numbered_list_item', blocks: IDataObject[], listItemChildBlocks: Map<number, IDataObject[]>): void {
+    try {
+      // Process each <li> element as a potential branch point
+      const listItems = NotionAITool.extractListItemsWithBranching(listContent);
+      
+      for (let i = 0; i < listItems.length; i++) {
+        const item = listItems[i];
+        if (!item.text && !item.children.length) continue;
+        
+        // Create list item block
+        const listItemBlock: IDataObject = {
+          type: listType,
+          [listType]: {
+            rich_text: [],
+          },
+        };
+        
+        // Add parent text if present
+        if (item.text && item.text.trim()) {
+          const cleanText = NotionAITool.processNestedHtmlInListItem(item.text);
+          if (cleanText) {
+            (listItemBlock[listType] as any).rich_text = NotionAITool.parseBasicMarkdown(cleanText);
+          }
+        }
+        
+        // Collect all child blocks
+        const allChildBlocks: IDataObject[] = [];
+        
+        // Add child blocks from hierarchical processing
+        const childBlocks = listItemChildBlocks.get(i) || [];
+        allChildBlocks.push(...childBlocks);
+        
+        // Process nested list children (traditional nested lists)
+        if (item.children.length > 0) {
+          for (const child of item.children) {
+            const childListType = child.type === 'ul' ? 'bulleted_list_item' : 'numbered_list_item';
+            NotionAITool.processNestedList(child.content, childListType, allChildBlocks);
+          }
+        }
+        
+        // Add children to the parent block
+        if (allChildBlocks.length > 0) {
+          (listItemBlock[listType] as any).children = allChildBlocks;
         }
         
         // Only add the block if it has text or children
@@ -1757,18 +1936,23 @@ export class NotionAITool implements INodeType {
         }
       }
     } catch (error) {
-      console.warn('Error processing nested list:', error);
+      console.warn('Error processing nested list with child blocks:', error);
       // Fallback: create a simple text block with the content
       blocks.push({
         type: 'paragraph',
         paragraph: {
-          rich_text: [{ type: 'text', text: { content: 'Error processing list content' } }],
+          rich_text: [{ type: 'text', text: { content: 'Error processing list content with child blocks' } }],
         },
       });
     }
   }
 
-  // Extract list items with proper branching structure - only process top-level <li> tags
+  // Legacy function for backward compatibility
+  static processNestedList(listContent: string, listType: 'bulleted_list_item' | 'numbered_list_item', blocks: IDataObject[], childNodes?: XMLNode[]): void {
+    NotionAITool.processNestedListWithChildBlocks(listContent, listType, blocks, new Map());
+  }
+
+  // Extract list items with proper branching structure - simplified for hierarchical processing
   static extractListItemsWithBranching(content: string): Array<{text: string, children: Array<{type: string, content: string}>}> {
     const items: Array<{text: string, children: Array<{type: string, content: string}>}> = [];
     
