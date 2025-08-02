@@ -584,26 +584,30 @@ export class NotionAITool implements INodeType {
       // Skip completely empty lines and placeholder artifacts
       if (!trimmedLine || /__BLOCK_\d+__/.test(trimmedLine) || /^\d+__$/.test(trimmedLine)) continue;
       
-      // Skip lines that contain XML tag patterns (to prevent double processing)
-      const xmlTagPatterns = [
-        /<[^>]+>/,                           // Any XML/HTML tag
-        /&lt;[^&]+&gt;/,                     // HTML-encoded tags
-        // Comprehensive list of all supported XML tags
-        /<(h[1-6]|p|ul|ol|li|strong|em|b|i|code|blockquote|callout|todo|image|embed|bookmark|equation|toggle|divider|quote|pre)\b[^>]*>/i,
+      // Skip lines that contain ANY XML/HTML tag patterns (to prevent double processing)
+      // This is a comprehensive check to ensure NO XML content gets processed twice
+      const hasAnyXmlTags = (
+        // Basic XML/HTML tag detection
+        /<[^>]+>/.test(trimmedLine) ||
+        // HTML-encoded tags
+        /&lt;[^&]+&gt;/.test(trimmedLine) ||
+        // Any opening or closing XML/HTML tags
+        /<\/?[a-zA-Z][a-zA-Z0-9]*[^>]*>/.test(trimmedLine) ||
         // Self-closing tags
-        /<(image|divider|br)\s[^>]*\/>/i,
-        // Specific tag patterns that should be processed hierarchically
-        /<callout\s*(?:type="[^"]*")?\s*>/i,
-        /<code\s*(?:language="[^"]*")?\s*>/i,
-        /<todo\s*(?:checked="[^"]*")?\s*>/i,
-        /<image\s+src="[^"]*"[^>]*>/i,
-        // Closing tags
-        /<\/(h[1-6]|p|ul|ol|li|strong|em|b|i|code|blockquote|callout|todo|image|embed|bookmark|equation|toggle|divider|quote|pre)>/i,
-      ];
+        /<[a-zA-Z][a-zA-Z0-9]*[^>]*\/>/.test(trimmedLine) ||
+        // Common XML/HTML tag names (comprehensive list)
+        /<\/?(?:h[1-6]|p|div|span|ul|ol|li|strong|b|em|i|code|pre|blockquote|callout|todo|image|embed|bookmark|equation|toggle|quote|divider|br|a|u|s|del|mark)\b[^>]*>/i.test(trimmedLine) ||
+        // Specific attribute patterns
+        /(?:type|src|href|alt|language|checked)="[^"]*"/.test(trimmedLine) ||
+        // Any line that looks like it contains XML structure
+        /^\s*<[^>]+>.*<\/[^>]+>\s*$/.test(trimmedLine) ||
+        // Lines that start or end with XML tags
+        /^\s*<[^>]+>/.test(trimmedLine) ||
+        /<\/[^>]+>\s*$/.test(trimmedLine)
+      );
       
-      const hasXmlTags = xmlTagPatterns.some(pattern => pattern.test(trimmedLine));
-      if (hasXmlTags) {
-        continue; // Skip processing this line as it contains XML content that should be handled hierarchically
+      if (hasAnyXmlTags) {
+        continue; // Skip ALL lines containing XML content to prevent double processing
       }
 
       // Traditional markdown patterns (for backwards compatibility)
@@ -844,17 +848,18 @@ export class NotionAITool implements INodeType {
     }
   }
 
-  // Build hierarchical XML tree structure
+  // Enhanced hierarchical XML tree structure that catches ALL XML content
   static buildXMLTree(content: string, tagProcessors: any[]): XMLNode[] {
     const allMatches: XMLNode[] = [];
+    const processedRanges: { start: number; end: number; }[] = [];
     
-    // Collect all XML tags with their positions
+    // Step 1: Collect all XML tags with specific processors
     tagProcessors.forEach(({ regex, blockCreator, listProcessor }) => {
       const globalRegex = new RegExp(regex.source, 'gis');
       let match;
       while ((match = globalRegex.exec(content)) !== null) {
         const tagName = match[0].match(/<(\w+)/)?.[1] || 'unknown';
-        allMatches.push({
+        const xmlNode = {
           id: `${tagName}_${match.index}_${Date.now()}_${Math.random()}`,
           tagName,
           start: match.index,
@@ -867,14 +872,50 @@ export class NotionAITool implements INodeType {
           innerContent: match[0],
           replacement: undefined,
           listProcessor
-        });
+        };
+        allMatches.push(xmlNode);
+        processedRanges.push({ start: xmlNode.start, end: xmlNode.end });
       }
     });
 
-    // Sort by start position
+    // Step 2: Catch ANY remaining XML/HTML tags that weren't processed by specific processors
+    // This prevents ANY XML content from falling through to traditional processing
+    const genericXmlRegex = /<[^>]+>[\s\S]*?<\/[^>]+>|<[^>]+\/>/gis;
+    let genericMatch;
+    while ((genericMatch = genericXmlRegex.exec(content)) !== null) {
+      const matchStart = genericMatch.index;
+      const matchEnd = genericMatch.index + genericMatch[0].length;
+      
+      // Check if this match overlaps with any already processed range
+      const hasOverlap = processedRanges.some(range =>
+        (matchStart < range.end && matchEnd > range.start)
+      );
+      
+      if (!hasOverlap) {
+        const tagName = genericMatch[0].match(/<(\w+)/)?.[1] || 'generic';
+        const xmlNode = {
+          id: `${tagName}_${matchStart}_${Date.now()}_${Math.random()}`,
+          tagName,
+          start: matchStart,
+          end: matchEnd,
+          match: genericMatch[0],
+          processor: () => null, // Generic processor that just removes the content
+          groups: [],
+          children: [],
+          depth: 0,
+          innerContent: genericMatch[0],
+          replacement: undefined,
+          listProcessor: undefined
+        };
+        allMatches.push(xmlNode);
+        processedRanges.push({ start: matchStart, end: matchEnd });
+      }
+    }
+
+    // Sort by start position to maintain document order
     allMatches.sort((a, b) => a.start - b.start);
 
-    // Build parent-child relationships
+    // Build parent-child relationships while preserving ordering
     const rootNodes: XMLNode[] = [];
     const nodeStack: XMLNode[] = [];
 
