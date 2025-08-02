@@ -588,7 +588,17 @@ export class NotionAITool implements INodeType {
       const xmlTagPatterns = [
         /<[^>]+>/,                           // Any XML/HTML tag
         /&lt;[^&]+&gt;/,                     // HTML-encoded tags
+        // Comprehensive list of all supported XML tags
         /<(h[1-6]|p|ul|ol|li|strong|em|b|i|code|blockquote|callout|todo|image|embed|bookmark|equation|toggle|divider|quote|pre)\b[^>]*>/i,
+        // Self-closing tags
+        /<(image|divider|br)\s[^>]*\/>/i,
+        // Specific tag patterns that should be processed hierarchically
+        /<callout\s*(?:type="[^"]*")?\s*>/i,
+        /<code\s*(?:language="[^"]*")?\s*>/i,
+        /<todo\s*(?:checked="[^"]*")?\s*>/i,
+        /<image\s+src="[^"]*"[^>]*>/i,
+        // Closing tags
+        /<\/(h[1-6]|p|ul|ol|li|strong|em|b|i|code|blockquote|callout|todo|image|embed|bookmark|equation|toggle|divider|quote|pre)>/i,
       ];
       
       const hasXmlTags = xmlTagPatterns.some(pattern => pattern.test(trimmedLine));

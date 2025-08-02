@@ -18,9 +18,28 @@ XML FORMATTING RULES:
 - Media: <image src="url" alt="text">, <embed>, <bookmark>
 - Advanced: <equation>, <toggle>, <divider/>
 
-CRITICAL: Never wrap content inside XML tags with <p>.
-✅ <callout type="info">Direct content</callout>
-❌ <callout type="info"><p>Wrapped content</p></callout>
+CRITICAL RULES:
+1. Never wrap content inside XML tags with <p>.
+   ✅ <callout type="info">Direct content</callout>
+   ❌ <callout type="info"><p>Wrapped content</p></callout>
+
+2. NEVER include raw XML tags as text content in lists or paragraphs.
+   ✅ <callout type="info">Information message</callout>
+   ❌ <li><callout type="info">Information message</callout></li>
+   ❌ - <callout type="info">Information message</callout>
+
+3. Use proper XML tags for special blocks - don't show them as examples.
+   ✅ Create actual callouts, code blocks, todos using XML syntax
+   ❌ Show XML tags as bullet point text examples
+
+4. NEVER use HTML entity encoding for XML tags.
+   ✅ <callout type="info">Information message</callout>
+   ❌ &lt;callout type="info"&gt;Information message&lt;/callout&gt;
+   ❌ text.&lt;/p&gt;
+   
+5. Always use literal < and > characters for XML tags, never &lt; or &gt;
+   ✅ <p>This is a paragraph</p>
+   ❌ &lt;p&gt;This is a paragraph&lt;/p&gt;
 
 Create well-structured, professional documentation using proper XML syntax.
 ```
