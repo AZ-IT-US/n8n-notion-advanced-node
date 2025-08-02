@@ -581,7 +581,7 @@ export class NotionAITool implements INodeType {
       const line = lines[i];
       const trimmedLine = line.trim();
       
-      // Skip completely empty lines and XML placeholders (now using dynamic prefix check)
+      // Skip completely empty lines and XML placeholders (consistent format check)
       if (!trimmedLine || /__XML_[a-f0-9]{8}_\d+__/.test(trimmedLine)) continue;
       
       // Skip lines that contain XML tag patterns (to prevent double processing)
@@ -897,9 +897,8 @@ export class NotionAITool implements INodeType {
   }
 
   // Process XML tree depth-first (children before parents)
-  static processXMLTreeDepthFirst(nodes: XMLNode[], blocks: IDataObject[], placeholderPrefix: string): Map<string, string> {
+  static processXMLTreeDepthFirst(nodes: XMLNode[], blocks: IDataObject[], placeholderPrefix: string, placeholderCounter: { value: number }): Map<string, string> {
     const replacements = new Map<string, string>();
-    let blockCounter = 0;
 
     const processNode = (node: XMLNode): string => {
       // First, process all children depth-first
@@ -948,7 +947,7 @@ export class NotionAITool implements INodeType {
         // Handle special list processors
         if (node.listProcessor && (node.tagName === 'ul' || node.tagName === 'ol')) {
           node.listProcessor(innerContent, blocks);
-          return `${placeholderPrefix}${blockCounter++}__`;
+          return `${placeholderPrefix}${placeholderCounter.value++}__`;
         }
         
         // Use blockCreator to create the block
@@ -958,7 +957,7 @@ export class NotionAITool implements INodeType {
           blocks.push(block);
         }
         
-        return `${placeholderPrefix}${blockCounter++}__`;
+        return `${placeholderPrefix}${placeholderCounter.value++}__`;
       } catch (error) {
         console.warn(`Error processing XML node ${node.tagName}:`, error);
         return node.match; // Return original if processing fails
@@ -1014,8 +1013,10 @@ export class NotionAITool implements INodeType {
   static processXmlTags(content: string, blocks: IDataObject[]): string {
     let processedContent = content;
     
-    // Generate unique placeholder prefix to avoid collisions
-    const placeholderPrefix = `__XML_${randomUUID().slice(0, 8)}_`;
+    // Generate consistent placeholder format: __XML_{uuid8}_{counter}__
+    const placeholderUuid = randomUUID().slice(0, 8);
+    const placeholderPrefix = `__XML_${placeholderUuid}_`;
+    let placeholderCounter = 0;
     
     // Debug mode for development
     const DEBUG_ORDERING = process.env.NODE_ENV === 'development';
@@ -1303,7 +1304,8 @@ export class NotionAITool implements INodeType {
       }
 
       // Step 2: Process tree depth-first (children before parents)
-      const replacements = NotionAITool.processXMLTreeDepthFirst(xmlTree, blocks, placeholderPrefix);
+      const counterRef = { value: 0 };
+      const replacements = NotionAITool.processXMLTreeDepthFirst(xmlTree, blocks, placeholderPrefix, counterRef);
       
       // Step 3: Apply hierarchical replacements to content
       processedContent = NotionAITool.applyHierarchicalReplacements(processedContent, xmlTree, replacements);
@@ -1334,7 +1336,7 @@ export class NotionAITool implements INodeType {
                 if (block) {
                   blocks.push(block);
                 }
-                return `${placeholderPrefix}${Math.random()}__`;
+                return `${placeholderPrefix}${placeholderCounter++}__`;
               } catch (error) {
                 console.warn('Error in fallback processor:', error);
                 return match;
@@ -1371,32 +1373,17 @@ export class NotionAITool implements INodeType {
   static cleanupRemainingHtml(content: string, placeholderPrefix?: string): string {
     let cleaned = content;
     
-    // Remove XML_BLOCK placeholder artifacts (support both old and new format)
+    // Simplified placeholder cleanup - use one consistent pattern
     if (placeholderPrefix) {
-      // More aggressive placeholder cleanup with multiple patterns
-      const placeholderPatterns = [
-        new RegExp(`${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+__`, 'g'),
-        new RegExp(`_${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+_`, 'g'),
-        new RegExp(`${placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\d+`, 'g')
-      ];
-      
-      placeholderPatterns.forEach(pattern => {
-        cleaned = cleaned.replace(pattern, '');
-      });
+      // Clean up our specific placeholder format: __XML_{uuid8}_{number}__
+      const escapedPrefix = placeholderPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const placeholderPattern = new RegExp(`${escapedPrefix}\\d+__`, 'g');
+      cleaned = cleaned.replace(placeholderPattern, '');
     }
     
-    // Comprehensive fallback cleanup for all possible placeholder formats
-    const fallbackPatterns = [
-      /__XML_BLOCK_\d+__/g,
-      /__XML_[a-f0-9]{8}_\d+__/g,
-      /_XML_[a-f0-9]{8}_\d+_/g,
-      /__XML_[a-f0-9-]+_\d+__/g,
-      /_XML_[a-f0-9-]+_\d+_/g
-    ];
-    
-    fallbackPatterns.forEach(pattern => {
-      cleaned = cleaned.replace(pattern, '');
-    });
+    // Single fallback cleanup for the standard format only
+    const standardPlaceholderPattern = /__XML_[a-f0-9]{8}_\d+__/g;
+    cleaned = cleaned.replace(standardPlaceholderPattern, '');
     
     // Remove entire lines containing XML content to prevent double processing
     const xmlContentLines = [
@@ -1451,23 +1438,6 @@ export class NotionAITool implements INodeType {
     
     // Remove multiple consecutive line breaks
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-    
-    // Remove lines that contain only XML_BLOCK artifacts (more patterns)
-    const artifactPatterns = [
-      /^.*__XML_BLOCK_\d+__.*$/gm,
-      /^.*__XML_[a-f0-9]{8}_\d+__.*$/gm,
-      /^.*_XML_[a-f0-9]{8}_\d+_.*$/gm,
-      /^.*__XML_[a-f0-9-]+_\d+__.*$/gm,
-      /^.*_XML_[a-f0-9-]+_\d+_.*$/gm
-    ];
-    
-    artifactPatterns.forEach(pattern => {
-      cleaned = cleaned.replace(pattern, '');
-    });
-    
-    // Final cleanup of any remaining isolated placeholder patterns
-    cleaned = cleaned.replace(/\b_+XML_[a-f0-9-]+_\d+_*\b/g, '');
-    cleaned = cleaned.replace(/\b_*XML_[a-f0-9-]+_\d+_+\b/g, '');
     
     return cleaned.trim();
   }
@@ -1551,12 +1521,12 @@ export class NotionAITool implements INodeType {
   static convertInlineHtmlToMarkdown(content: string): string {
     let processed = content;
 
-    // Convert HTML formatting tags to markdown equivalents
+    // Convert HTML formatting tags to markdown equivalents - process in order to handle nested tags
     const htmlToMarkdown = [
       { regex: /<strong\s*[^>]*>(.*?)<\/strong>/gis, replacement: '**$1**' },
       { regex: /<b\s*[^>]*>(.*?)<\/b>/gis, replacement: '**$1**' },
-      { regex: /<em\s*[^>]*>(.*?)<\/em>/gis, replacement: '*$1*' },
-      { regex: /<i\s*[^>]*>(.*?)<\/i>/gis, replacement: '*$1*' },
+      { regex: /<em\s*[^>]*>(.*?)<\/em>/gis, replacement: '_$1_' }, // Use underscore to avoid conflicts
+      { regex: /<i\s*[^>]*>(.*?)<\/i>/gis, replacement: '_$1_' },   // Use underscore to avoid conflicts
       { regex: /<code\s*[^>]*>(.*?)<\/code>/gis, replacement: '`$1`' },
       { regex: /<a\s+href="([^"]*)"[^>]*>(.*?)<\/a>/gis, replacement: '[$2]($1)' },
       { regex: /<u\s*[^>]*>(.*?)<\/u>/gis, replacement: '$1' }, // Notion doesn't support underline
@@ -1713,7 +1683,8 @@ export class NotionAITool implements INodeType {
       { regex: /\[([^\]]+)\]\(([^)]+)\)/g, type: 'link' },        // [text](url)
       { regex: /\*\*\*([^*]+)\*\*\*/g, type: 'bold_italic' },    // ***bold italic***
       { regex: /\*\*([^*]+)\*\*/g, type: 'bold' },               // **bold**
-      { regex: /\*([^*]+)\*/g, type: 'italic' },                 // *italic*
+      { regex: /_([^_]+)_/g, type: 'italic' },                   // _italic_ (changed from *)
+      { regex: /\*([^*]+)\*/g, type: 'italic' },                 // *italic* (keep for backward compatibility)
       { regex: /~~([^~]+)~~/g, type: 'strikethrough' },          // ~~strikethrough~~
       { regex: /`([^`]+)`/g, type: 'code' },                     // `code`
     ];
