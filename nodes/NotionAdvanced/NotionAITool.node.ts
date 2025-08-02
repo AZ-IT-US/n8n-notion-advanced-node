@@ -1776,8 +1776,8 @@ export class NotionAITool implements INodeType {
       const listItemPositions = NotionAITool.getListItemPositions(listContent);
       
       for (let i = 0; i < listItems.length; i++) {
-        const item = listItems[i];
-        if (!item.text && !item.children.length) continue;
+      const item = listItems[i];
+      if (!item.text && !item.children.length && !((item as any).extractedChildBlocks && (item as any).extractedChildBlocks.length > 0)) continue;
         
         // Create list item block
         const listItemBlock: IDataObject = {
@@ -1798,20 +1798,25 @@ export class NotionAITool implements INodeType {
         // Collect child hierarchy nodes for this list item based on position mapping
         const itemChildNodes: HierarchyNode[] = [];
         
-        // Map child hierarchy nodes that belong to this specific list item
-        if (i < listItemPositions.length) {
-          const currentItemStart = listItemPositions[i].start;
-          const currentItemEnd = listItemPositions[i].end;
-          
-          for (const childNode of childHierarchyNodes) {
-            const childPosition = childNode.metadata?.sourcePosition;
-            if (childPosition !== undefined &&
-                childPosition >= currentItemStart &&
-                childPosition < currentItemEnd) {
-              itemChildNodes.push(childNode);
-            }
+        // Add extracted child blocks (from XML tags within list items)
+        // These are the primary source for child blocks in list items
+        if ((item as any).extractedChildBlocks && Array.isArray((item as any).extractedChildBlocks)) {
+          const extractedBlocks = (item as any).extractedChildBlocks as IDataObject[];
+          for (const block of extractedBlocks) {
+            itemChildNodes.push({
+              block,
+              children: [],
+              metadata: {
+                sourcePosition: i,
+                tagName: block.type as string
+              }
+            });
           }
         }
+        
+        // Note: We prioritize extractedChildBlocks over childHierarchyNodes for list items
+        // since list-specific processing in extractListItemsWithBranching is more accurate
+        // for handling child blocks within <li> elements
         
         // Process nested list children (traditional nested lists)
         if (item.children.length > 0) {
@@ -1834,7 +1839,7 @@ export class NotionAITool implements INodeType {
           }
         };
         
-        // Only add if it has content or children
+        // Only add if it has content or children (including extracted child blocks)
         const listData = listItemBlock[listType] as any;
         if ((listData.rich_text && listData.rich_text.length > 0) || itemChildNodes.length > 0) {
           listItemHierarchyNodes.push(listItemHierarchyNode);
@@ -2085,8 +2090,9 @@ export class NotionAITool implements INodeType {
       
       const item = { text: '', children: [] as Array<{type: string, content: string}> };
       
-      // STEP 1: Remove child block XML from content to get clean parent text
+      // STEP 1: Extract and convert child block XML to actual blocks before removing from parent text
       let parentTextContent = fullItemContent;
+      const extractedChildBlocks: IDataObject[] = [];
       
       // List of XML tags that create child blocks (these should be removed from parent text)
       const childBlockTags = [
@@ -2096,15 +2102,187 @@ export class NotionAITool implements INodeType {
         'equation', 'divider'
       ];
       
-      // Remove child block XML from parent text
+      // Extract child blocks first, then remove from parent text
       childBlockTags.forEach(tag => {
-        // Remove both self-closing and paired tags
-        const selfClosingRegex = new RegExp(`<${tag}[^>]*\\/>`, 'gis');
-        const pairedRegex = new RegExp(`<${tag}[^>]*>.*?<\\/${tag}>`, 'gis');
+        // Extract and process paired tags first
+        const pairedRegex = new RegExp(`<${tag}[^>]*>(.*?)<\\/${tag}>`, 'gis');
+        let match;
+        while ((match = pairedRegex.exec(parentTextContent)) !== null) {
+          const fullMatch = match[0];
+          const content = match[1];
+          
+          // Create child block based on tag type
+          try {
+            let childBlock: IDataObject | null = null;
+            
+            switch (tag) {
+              case 'embed':
+                childBlock = {
+                  type: 'embed',
+                  embed: { url: content.trim() }
+                };
+                break;
+              case 'bookmark':
+                childBlock = {
+                  type: 'bookmark',
+                  bookmark: { url: content.trim() }
+                };
+                break;
+              case 'p':
+                const markdownContent = NotionAITool.convertInlineHtmlToMarkdown(content.trim());
+                childBlock = {
+                  type: 'paragraph',
+                  paragraph: { rich_text: NotionAITool.parseBasicMarkdown(markdownContent) }
+                };
+                break;
+              case 'h1':
+              case 'h2':
+              case 'h3':
+                const headingType = `heading_${tag.charAt(1)}` as 'heading_1' | 'heading_2' | 'heading_3';
+                childBlock = {
+                  type: headingType,
+                  [headingType]: { rich_text: [{ type: 'text', text: { content: content.trim() } }] }
+                };
+                break;
+              case 'quote':
+              case 'blockquote':
+                childBlock = {
+                  type: 'quote',
+                  quote: { rich_text: NotionAITool.parseBasicMarkdown(content.trim()) }
+                };
+                break;
+              case 'callout':
+                // Extract type attribute if present
+                const typeMatch = fullMatch.match(/type="([^"]*)"/);
+                const calloutType = typeMatch ? typeMatch[1] : 'info';
+                const emoji = NotionAITool.getCalloutEmoji(calloutType.toLowerCase());
+                const color = NotionAITool.getCalloutColor(calloutType.toLowerCase());
+                childBlock = {
+                  type: 'callout',
+                  callout: {
+                    rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+                    icon: { type: 'emoji', emoji },
+                    color: color
+                  }
+                };
+                break;
+              case 'code':
+              case 'pre':
+                // Extract language attribute if present
+                const langMatch = fullMatch.match(/language="([^"]*)"/);
+                const language = langMatch ? langMatch[1] : 'plain_text';
+                childBlock = {
+                  type: 'code',
+                  code: {
+                    rich_text: [{ type: 'text', text: { content: content.trim() } }],
+                    language: language === 'plain text' ? 'plain_text' : language
+                  }
+                };
+                break;
+              case 'todo':
+                // Extract checked attribute if present
+                const checkedMatch = fullMatch.match(/checked="([^"]*)"/);
+                const isChecked = checkedMatch ? checkedMatch[1].toLowerCase() === 'true' : false;
+                childBlock = {
+                  type: 'to_do',
+                  to_do: {
+                    rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+                    checked: isChecked
+                  }
+                };
+                break;
+              case 'toggle':
+                childBlock = {
+                  type: 'toggle',
+                  toggle: {
+                    rich_text: NotionAITool.parseBasicMarkdown(content.trim()),
+                    children: []
+                  }
+                };
+                break;
+              case 'equation':
+                childBlock = {
+                  type: 'equation',
+                  equation: { expression: content.trim() }
+                };
+                break;
+              case 'image':
+                // Extract src and alt attributes
+                const srcMatch = fullMatch.match(/src="([^"]*)"/);
+                const altMatch = fullMatch.match(/alt="([^"]*)"/);
+                const src = srcMatch ? srcMatch[1] : '';
+                const alt = altMatch ? altMatch[1] : '';
+                const caption = content.trim() || alt;
+                childBlock = {
+                  type: 'image',
+                  image: {
+                    type: 'external',
+                    external: { url: src },
+                    caption: caption ? NotionAITool.parseBasicMarkdown(caption) : []
+                  }
+                };
+                break;
+              case 'divider':
+                childBlock = {
+                  type: 'divider',
+                  divider: {}
+                };
+                break;
+            }
+            
+            if (childBlock) {
+              extractedChildBlocks.push(childBlock);
+            }
+          } catch (error) {
+            console.warn(`Error creating child block for tag ${tag}:`, error);
+          }
+        }
         
+        // Handle self-closing tags (mainly for divider, image)
+        const selfClosingRegex = new RegExp(`<${tag}[^>]*\\/>`, 'gis');
+        let selfMatch;
+        while ((selfMatch = selfClosingRegex.exec(parentTextContent)) !== null) {
+          const fullMatch = selfMatch[0];
+          
+          try {
+            let childBlock: IDataObject | null = null;
+            
+            if (tag === 'divider') {
+              childBlock = {
+                type: 'divider',
+                divider: {}
+              };
+            } else if (tag === 'image') {
+              // Extract src and alt attributes
+              const srcMatch = fullMatch.match(/src="([^"]*)"/);
+              const altMatch = fullMatch.match(/alt="([^"]*)"/);
+              const src = srcMatch ? srcMatch[1] : '';
+              const alt = altMatch ? altMatch[1] : '';
+              childBlock = {
+                type: 'image',
+                image: {
+                  type: 'external',
+                  external: { url: src },
+                  caption: alt ? NotionAITool.parseBasicMarkdown(alt) : []
+                }
+              };
+            }
+            
+            if (childBlock) {
+              extractedChildBlocks.push(childBlock);
+            }
+          } catch (error) {
+            console.warn(`Error creating self-closing child block for tag ${tag}:`, error);
+          }
+        }
+        
+        // Now remove both paired and self-closing tags from parent text
         parentTextContent = parentTextContent.replace(pairedRegex, '');
         parentTextContent = parentTextContent.replace(selfClosingRegex, '');
       });
+      
+      // Store extracted child blocks in the item for later use
+      (item as any).extractedChildBlocks = extractedChildBlocks;
       
       // STEP 2: Process the content to separate remaining text from nested lists
       let contentPos = 0;
@@ -2201,8 +2379,8 @@ export class NotionAITool implements INodeType {
         }
       }
       
-      // Only add items that have either text or children
-      if (item.text.trim() || item.children.length > 0) {
+      // Only add items that have either text, children, or extracted child blocks
+      if (item.text.trim() || item.children.length > 0 || ((item as any).extractedChildBlocks && (item as any).extractedChildBlocks.length > 0)) {
         items.push(item);
       }
       
