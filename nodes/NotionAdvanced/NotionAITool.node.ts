@@ -581,8 +581,8 @@ export class NotionAITool implements INodeType {
       const line = lines[i];
       const trimmedLine = line.trim();
       
-      // Skip completely empty lines and XML placeholders (consistent format check)
-      if (!trimmedLine || /__XML_[a-f0-9]{8}_\d+__/.test(trimmedLine)) continue;
+      // Skip completely empty lines and placeholder artifacts
+      if (!trimmedLine || /__BLOCK_\d+__/.test(trimmedLine) || /^\d+__$/.test(trimmedLine)) continue;
       
       // Skip lines that contain XML tag patterns (to prevent double processing)
       const xmlTagPatterns = [
@@ -897,7 +897,7 @@ export class NotionAITool implements INodeType {
   }
 
   // Process XML tree depth-first (children before parents)
-  static processXMLTreeDepthFirst(nodes: XMLNode[], blocks: IDataObject[], placeholderPrefix: string, placeholderCounter: { value: number }): Map<string, string> {
+  static processXMLTreeDepthFirst(nodes: XMLNode[], blocks: IDataObject[], placeholderCounter: { value: number }): Map<string, string> {
     const replacements = new Map<string, string>();
 
     const processNode = (node: XMLNode): string => {
@@ -947,7 +947,7 @@ export class NotionAITool implements INodeType {
         // Handle special list processors
         if (node.listProcessor && (node.tagName === 'ul' || node.tagName === 'ol')) {
           node.listProcessor(innerContent, blocks);
-          return `${placeholderPrefix}${placeholderCounter.value++}__`;
+          return `__BLOCK_${placeholderCounter.value++}__`;
         }
         
         // Use blockCreator to create the block
@@ -957,7 +957,7 @@ export class NotionAITool implements INodeType {
           blocks.push(block);
         }
         
-        return `${placeholderPrefix}${placeholderCounter.value++}__`;
+        return `__BLOCK_${placeholderCounter.value++}__`;
       } catch (error) {
         console.warn(`Error processing XML node ${node.tagName}:`, error);
         return node.match; // Return original if processing fails
@@ -1013,10 +1013,11 @@ export class NotionAITool implements INodeType {
   static processXmlTags(content: string, blocks: IDataObject[]): string {
     let processedContent = content;
     
-    // Generate consistent placeholder format: __XML_{uuid8}_{counter}__
-    const placeholderUuid = randomUUID().slice(0, 8);
-    const placeholderPrefix = `__XML_${placeholderUuid}_`;
-    let placeholderCounter = 0;
+    // First, decode HTML entities to proper XML tags
+    processedContent = NotionAITool.decodeHtmlEntities(processedContent);
+    
+    // Use simple sequential placeholder format: __BLOCK_N__
+    let placeholderCounter = 1; // Start from 1 for cleaner numbering
     
     // Debug mode for development
     const DEBUG_ORDERING = process.env.NODE_ENV === 'development';
@@ -1304,14 +1305,14 @@ export class NotionAITool implements INodeType {
       }
 
       // Step 2: Process tree depth-first (children before parents)
-      const counterRef = { value: 0 };
-      const replacements = NotionAITool.processXMLTreeDepthFirst(xmlTree, blocks, placeholderPrefix, counterRef);
+      const counterRef = { value: 1 };
+      const replacements = NotionAITool.processXMLTreeDepthFirst(xmlTree, blocks, counterRef);
       
       // Step 3: Apply hierarchical replacements to content
       processedContent = NotionAITool.applyHierarchicalReplacements(processedContent, xmlTree, replacements);
       
       // Step 4: Clean up any remaining HTML tags
-      processedContent = NotionAITool.cleanupRemainingHtml(processedContent, placeholderPrefix);
+      processedContent = NotionAITool.cleanupRemainingHtml(processedContent);
       
       if (DEBUG_ORDERING) {
         console.log(`Processed ${xmlTree.length} root XML nodes hierarchically, created ${blocks.length} blocks`);
@@ -1336,7 +1337,7 @@ export class NotionAITool implements INodeType {
                 if (block) {
                   blocks.push(block);
                 }
-                return `${placeholderPrefix}${placeholderCounter++}__`;
+                return `__BLOCK_${placeholderCounter++}__`;
               } catch (error) {
                 console.warn('Error in fallback processor:', error);
                 return match;
@@ -1363,10 +1364,30 @@ export class NotionAITool implements INodeType {
         processedContent = NotionAITool.optimizedReplace(processedContent, processedMatches);
       }
       
-      processedContent = NotionAITool.cleanupRemainingHtml(processedContent, placeholderPrefix);
+      processedContent = NotionAITool.cleanupRemainingHtml(processedContent);
     }
 
     return processedContent;
+  }
+
+  // Helper function to decode HTML entities
+  static decodeHtmlEntities(content: string): string {
+    const entityMap: { [key: string]: string } = {
+      '&lt;': '<',
+      '&gt;': '>',
+      '&amp;': '&',
+      '&quot;': '"',
+      '&apos;': "'",
+      '&#39;': "'",
+      '&nbsp;': ' ',
+    };
+    
+    let decoded = content;
+    Object.entries(entityMap).forEach(([entity, char]) => {
+      decoded = decoded.replace(new RegExp(entity, 'g'), char);
+    });
+    
+    return decoded;
   }
 
   // Cleanup function to remove remaining HTML tags and XML_BLOCK artifacts
@@ -1381,9 +1402,18 @@ export class NotionAITool implements INodeType {
       cleaned = cleaned.replace(placeholderPattern, '');
     }
     
-    // Single fallback cleanup for the standard format only
-    const standardPlaceholderPattern = /__XML_[a-f0-9]{8}_\d+__/g;
-    cleaned = cleaned.replace(standardPlaceholderPattern, '');
+    // Comprehensive fallback cleanup for all possible placeholder formats
+    const placeholderPatterns = [
+      /__XML_[a-f0-9]{8}_\d+__/g,           // Standard format: __XML_abc12345_1__
+      /\b[A-Z]{2}[a-z0-9]{8,12}_+\b/g,      // Variations like "MLb82d670450__"
+      /\b[A-Za-z]{2,4}[a-f0-9]{6,12}_+\b/g, // More flexible pattern matching
+      /_[a-f0-9]{8,12}_\d+_*/g,             // Underscore variations
+      /[a-f0-9]{8,12}_\d+__/g,              // Without prefix
+    ];
+    
+    placeholderPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '');
+    });
     
     // Remove entire lines containing XML content to prevent double processing
     const xmlContentLines = [
